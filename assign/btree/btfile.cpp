@@ -106,8 +106,23 @@ BTreeFile::~BTreeFile ()
 //-------------------------------------------------------------------
 Status BTreeFile::DestroyFile ()
 {
-	//TODO: add your code here
-	return FAIL;
+	if (header->GetRootPageID() != INVALID_PAGE){
+	//Get the root page 
+		SortedPage *page;
+		PIN(header->GetRootPageID(), (Page *&)page);
+		if(page->GetType() == LEAF_NODE){
+			//free root page
+			FREEPAGE(header->GetRootPageID());
+		}else{
+			//recursively free all tree pages
+			//TODO
+		}
+	}
+	FREEPAGE(headerID);
+	headerID = INVALID_PAGE;
+	header = NULL;
+	Status s = MINIBASE_DB -> DeleteFileEntry(dbname);
+	return s;
 }
 
 //-------------------------------------------------------------------
@@ -122,7 +137,18 @@ Status BTreeFile::DestroyFile ()
 //-------------------------------------------------------------------
 Status BTreeFile::Insert (const char *key, const RecordID rid)
 {
-	//TODO: add your code here
+	if(header->GetRootPageID() == INVALID_PAGE){
+		BTLeafPage *page;
+		PageID pid;
+		NEWPAGE(pid, (Page *&)page);
+		page->Init(pid);
+		page->SetType(LEAF_NODE);
+		header->SetRootPageID(pid);
+		RecordID drid;
+		page->Insert(key, rid, drid); 
+		UNPIN(pid, (Page *&)page);
+		return OK;
+	}
 	return FAIL;
 }
 
