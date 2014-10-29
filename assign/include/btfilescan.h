@@ -16,7 +16,14 @@ public:
 	~BTreeFileScan();	
 
 private:
-	// You may add members and methods here.
+	BTreeFileScan::BTreeFileScan(BtLeafPage * lp, RecordID low, const char * hi){
+		current = low;
+		this -> hi = hi;
+		leaf = lp;
+	}
+	BtLeafPage * leaf;
+	RecordId current;
+	const char * hi;
 };
 
 #endif

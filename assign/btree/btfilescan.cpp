@@ -30,6 +30,8 @@ BTreeFileScan::~BTreeFileScan ()
 //-------------------------------------------------------------------
 Status BTreeFileScan::GetNext (RecordID & rid, char* keyPtr)
 {
-	//TODO: add your code here
-	return FAIL;
+	if((*leaf).GetNext(current, keyPtr, rid) == OK) return OK;
+	leaf = (*leaf).GetNextPage();
+	if(*leaf == INVALID_PAGE) return DONE;
+
 }
