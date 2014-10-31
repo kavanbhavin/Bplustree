@@ -2,6 +2,7 @@
 #define _BTREE_FILESCAN_H
 
 #include "btfile.h"
+#include "btleaf.h"
 
 class BTreeFile;
 
@@ -16,14 +17,13 @@ public:
 	~BTreeFileScan();	
 
 private:
-	BTreeFileScan::BTreeFileScan(BtLeafPage * lp, RecordID low, const char * hi){
-		current = low;
-		this -> hi = hi;
-		leaf = lp;
-	}
-	BtLeafPage * leaf;
-	RecordId current;
+	BTreeFileScan::BTreeFileScan(BTLeafPage * lp, RecordID low, const char * hi = NULL, bool upperBounded = true)
+	 :current(low), hi(hi), leaf(lp), upperBounded(upperBounded){ }
+
+	BTLeafPage * leaf;
+	RecordID current;
 	const char * hi;
+	bool upperBounded;
 };
 
 #endif

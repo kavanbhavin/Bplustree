@@ -4,6 +4,7 @@
 #include "new_error.h"
 #include "btfile.h"
 #include "btfilescan.h"
+#include <cstring>
 
 //-------------------------------------------------------------------
 // BTreeFileScan::~BTreeFileScan
@@ -16,6 +17,7 @@
 BTreeFileScan::~BTreeFileScan ()
 {
 	//TODO: add your code here
+	//TODO : unpin current page
 }
 
 
@@ -30,8 +32,37 @@ BTreeFileScan::~BTreeFileScan ()
 //-------------------------------------------------------------------
 Status BTreeFileScan::GetNext (RecordID & rid, char* keyPtr)
 {
-	if((*leaf).GetNext(current, keyPtr, rid) == OK) return OK;
-	leaf = (*leaf).GetNextPage();
-	if(*leaf == INVALID_PAGE) return DONE;
-
+	RecordID mayberid;
+	char * maybekeyptr;
+	//Get the next recordid on this page
+	if((*leaf).GetNext(current, maybekeyptr, mayberid) == OK) {
+		//We've reached a key that is above our range, unpin the current page and return DONE
+		if (!upperBounded || strcmp(maybekeyptr, hi) > 0) {
+			UNPIN(leaf->PageNo(), false);
+			return DONE;
+		}
+		//We're still in the ok range, update the required pointers and return OK
+		rid = mayberid;
+		keyPtr = maybekeyptr;
+		return OK;
+	}
+	//Need to look in next page
+	PageID newLeafPid = (*leaf).GetNextPage();
+	UNPIN(leaf->PageNo(), false);
+	if(newLeafPid == INVALID_PAGE) return DONE;
+	//next page is valid
+	PIN(newLeafPid, (Page*&)leaf);
+	if ((*leaf).GetFirst(current, maybekeyptr, mayberid) == OK) {
+		//We've reached a key that is above our range, unpin the current page and return DONE
+		if (!upperBounded || strcmp(maybekeyptr, hi) > 0) {
+			UNPIN(leaf->PageNo(), false);
+			return DONE;
+		}
+		//We're still in the ok range, update the required pointers and return OK
+		rid = mayberid;
+		keyPtr = maybekeyptr;
+		return OK;
+	}
+	UNPIN(leaf->PageNo(), false);
+    return DONE;
 }

@@ -194,7 +194,18 @@ Status BTreeFile::Delete (const char *key, const RecordID rid)
 
 IndexFileScan *BTreeFile::OpenScan (const char *lowKey, const char *highKey)
 {
-	//TODO: add your code here
+	char* searchTerm = (lowKey == NULL) ? "" : lowKey; //assume "" is lowest string
+	PageID firstGuy;
+	Page* lowPage;
+	if (_Search(searchTerm, header->GetRootPageID(), firstGuy) != OK){
+		firstGuy = INVALID_PAGE;
+		lowPage = NULL;
+	}
+	else {
+		MINIBASE_BM->PinPage(firstGuy, (Page*&)lowPage);
+	}
+	//IndexFileScan* tbr = new IndexFileScan(
+
 	return NULL;
 }
 

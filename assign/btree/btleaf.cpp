@@ -130,6 +130,12 @@ Status BTLeafPage::GetCurrent (RecordID rid, char* key, RecordID & dataRid)
 	return OK;
 }
 
+//Search for the smallest rid that is bigger than this key. DONE if none exists.
+Status BTLeafPage::_Search(const char* key, RecordID & dataRid)
+{
+
+}
+
 
 //-------------------------------------------------------------------
 // BTLeafPage::Delete

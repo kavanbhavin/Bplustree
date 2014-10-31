@@ -23,6 +23,8 @@ public:
 	Status GetCurrent (RecordID rid, char* key, RecordID & dataRid);
 	
 	Status Delete (const char* key, const RecordID& dataRid);
+
+	Status _Search (const char* key, RecordID& dataRid);
 };
 
 #endif
