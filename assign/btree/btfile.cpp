@@ -206,10 +206,11 @@ IndexFileScan *BTreeFile::OpenScan (const char *lowKey, const char *highKey)
 	}
 	//If There is a page where this exists, find the recordid it exists at
 	RecordID firstRecord;
+	char firstKey[MAX_KEY_SIZE];
 	firstRecord.pageNo = INVALID_PAGE;
-	if (lowPage != NULL) lowPage->_Search(searchTerm, firstRecord);
+	if (lowPage != NULL) lowPage->_Search(searchTerm, firstRecord, firstKey);
 
-	IndexFileScan* tbr = new BTreeFileScan(lowPage, firstRecord, highKey, (highKey != NULL));
+	IndexFileScan* tbr = new BTreeFileScan(lowPage, firstRecord, firstKey, highKey, (highKey != NULL));
 
 	return tbr;
 }
