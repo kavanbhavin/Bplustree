@@ -145,7 +145,7 @@ Status BTreeFile::Insert (const char *key, const RecordID rid)
 		page->SetType(LEAF_NODE);
 		header->SetRootPageID(pid);
 		RecordID drid;
-		page->Insert(key, rid, drid); 
+		page->Insert(key, rid, drid);
 		UNPIN(pid, false);
 		return OK;
 	}
@@ -153,7 +153,7 @@ Status BTreeFile::Insert (const char *key, const RecordID rid)
 	PIN(header->GetRootPageID(), (Page *&) root);
 	RecordID newEntry;
 	Status r = ((BTLeafPage *)root)->Insert(key, rid, newEntry);
-	UNPIN(header->GetRootPageID(), false);
+	UNPIN(header->GetRootPageID(), true);
 	return r;
 }
 
@@ -172,7 +172,15 @@ Status BTreeFile::Insert (const char *key, const RecordID rid)
 
 Status BTreeFile::Delete (const char *key, const RecordID rid)
 {
-	//TODO: add your code here
+	if(header->GetRootPageID() == INVALID_PAGE) return FAIL;
+	SortedPage * root;
+	PIN(header->GetRootPageID(), (Page *&)root);
+	if(root->GetType() == LEAF_NODE){
+		Status  r = ((BTLeafPage *)root)->Delete(key, rid);
+		UNPIN(header->GetRootPageID(), true);
+		return r;
+	}
+	//if root is not leaf, fail for NOW
 	return FAIL;
 }
 
