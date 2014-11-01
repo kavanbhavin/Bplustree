@@ -32,6 +32,7 @@ BTreeFileScan::~BTreeFileScan ()
 //-------------------------------------------------------------------
 Status BTreeFileScan::GetNext (RecordID & rid, char* keyPtr)
 {
+	if (leaf == NULL) return DONE; //there was never anything to scan
 	RecordID mayberid;
 	char * maybekeyptr;
 	//Get the next recordid on this page

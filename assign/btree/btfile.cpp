@@ -196,7 +196,7 @@ IndexFileScan *BTreeFile::OpenScan (const char *lowKey, const char *highKey)
 {
 	char* searchTerm = (lowKey == NULL) ? "" : lowKey; //assume "" is lowest string
 	PageID firstGuy;
-	Page* lowPage;
+	BTLeafPage* lowPage;
 	if (_Search(searchTerm, header->GetRootPageID(), firstGuy) != OK){
 		firstGuy = INVALID_PAGE;
 		lowPage = NULL;
@@ -204,9 +204,14 @@ IndexFileScan *BTreeFile::OpenScan (const char *lowKey, const char *highKey)
 	else {
 		MINIBASE_BM->PinPage(firstGuy, (Page*&)lowPage);
 	}
-	//IndexFileScan* tbr = new IndexFileScan(
 
-	return NULL;
+	//If There is a page where this exists, find the recordid it exists at
+	RecordID firstRecord;
+	if (lowPage != NULL) lowPage->_Search(lowKey, firstRecord);
+
+	IndexFileScan* tbr = new BTreeFileScan(lowPage, firstRecord, highKey, (highKey != NULL));
+
+	return tbr;
 }
 
 
