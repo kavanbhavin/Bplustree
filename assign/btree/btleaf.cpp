@@ -141,11 +141,14 @@ Status BTLeafPage::_Search(const char* key, RecordID & dataRid, char * keyFound)
 		//if we have found the one we're looking for, good
 		if (strcmp(curKey, key) >= 0){
 			dataRid = curLoc;
-			keyFound = curKey;
+			//keyFound = curKey;	
+			memcpy(keyFound, curKey, strlen(curKey) + 1);
 			return OK;
 		}
 		//Otherwise, go on to the next one
-		if (GetNext(curLoc, curKey, curData) != OK) return DONE; //if we've searched everything
+		if (GetNext(curLoc, curKey, curData) != OK) {
+			return DONE; //if we've searched everything
+		}
 	}
 	//Not possible
 	return DONE;

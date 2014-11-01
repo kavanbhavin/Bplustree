@@ -18,12 +18,14 @@ public:
 
 private:
 	BTreeFileScan::BTreeFileScan(BTLeafPage * lp, RecordID low, char * curKey, const char * hi = NULL, bool upperBounded = true)
-	 :current(low), hi(hi), leaf(lp), upperBounded(upperBounded), curKey(curKey){}
+	 :current(low), hi(hi), leaf(lp), upperBounded(upperBounded){
+		 memcpy(this->curKey, curKey, strlen(curKey)+1);
+	}
 
 	BTLeafPage * leaf;
 	RecordID current;
 	const char * hi;
-	char * curKey;
+	char curKey[MAX_KEY_SIZE];
 	bool upperBounded;
 };
 

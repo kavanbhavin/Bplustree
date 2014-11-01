@@ -31,10 +31,10 @@ BTreeFileScan::~BTreeFileScan ()
 // Return  : OK if successful, DONE if no more records to read.
 //-------------------------------------------------------------------
 Status BTreeFileScan::GetNext (RecordID & rid, char* keyPtr)
-{
+{	
 	if (leaf == NULL || current.pageNo == INVALID_PAGE || curKey == NULL) return DONE; //there was never anything to scan
 	rid = current;
-	keyPtr = curKey;
+	memcpy(keyPtr, curKey, strlen(curKey) + 1);
 
 	RecordID mayberid;
 	char maybekeyptr[MAX_KEY_SIZE];
@@ -43,33 +43,36 @@ Status BTreeFileScan::GetNext (RecordID & rid, char* keyPtr)
 		//We've reached a key that is above our range, unpin the current page and return DONE
 		if (!upperBounded || strcmp(maybekeyptr, hi) > 0) {
 			UNPIN(leaf->PageNo(), false);
-			curKey = NULL; //make sure we return done next time
+			current.pageNo = INVALID_PAGE; //make sure we return done next time
 			return OK;
 		}
 		//We're still in the ok range, update the required pointers and return OK
 		current = mayberid;
-		curKey = maybekeyptr;
+		memcpy(curKey, maybekeyptr, strlen(maybekeyptr) + 1);
 		return OK;
 	}
 	//Need to look in next page
 	PageID newLeafPid = (*leaf).GetNextPage();
 	UNPIN(leaf->PageNo(), false);
-	if(newLeafPid == INVALID_PAGE) return DONE;
+	if(newLeafPid == INVALID_PAGE) {
+		current.pageNo = INVALID_PAGE; //make sure we return done next time
+		return OK;
+	}
 	//next page is valid
 	PIN(newLeafPid, (Page*&)leaf);
 	if ((*leaf).GetFirst(current, maybekeyptr, mayberid) == OK) {
 		//We've reached a key that is above our range, unpin the current page and return DONE
 		if (!upperBounded || strcmp(maybekeyptr, hi) > 0) {
 			UNPIN(leaf->PageNo(), false);
-			curKey = NULL; //make sure we return done next time
+			current.pageNo = INVALID_PAGE; //make sure we return done next time
 			return OK;
 		}
 		//We're still in the ok range, update the required pointers and return OK
 		current = mayberid;
-		curKey = maybekeyptr;
+		memcpy(curKey, maybekeyptr, strlen(maybekeyptr) + 1);
 		return OK;
 	}
 	UNPIN(leaf->PageNo(), false);
-	curKey = NULL; //make sure we return done next time
+	current.pageNo = INVALID_PAGE; //make sure we return done next time
     return OK;
 }
