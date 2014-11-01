@@ -32,9 +32,9 @@ BTreeFileScan::~BTreeFileScan ()
 //-------------------------------------------------------------------
 Status BTreeFileScan::GetNext (RecordID & rid, char* keyPtr)
 {
-	if (leaf == NULL) return DONE; //there was never anything to scan
+	if (leaf == NULL || current.pageNo == INVALID_PAGE) return DONE; //there was never anything to scan
 	RecordID mayberid;
-	char * maybekeyptr;
+	char maybekeyptr[120]; //SET THIS TO SOME RELEVANT VALUE
 	//Get the next recordid on this page
 	if((*leaf).GetNext(current, maybekeyptr, mayberid) == OK) {
 		//We've reached a key that is above our range, unpin the current page and return DONE

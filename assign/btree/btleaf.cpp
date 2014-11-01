@@ -56,6 +56,7 @@ Status BTLeafPage::GetFirst (RecordID& rid, char* key, RecordID & dataRid)
 		dataRid.slotNo = INVALID_SLOT;
 		return DONE;
 	}
+
 	
 	GetKeyData(key, 
 		(DataType *)&dataRid, 
@@ -134,11 +135,11 @@ Status BTLeafPage::GetCurrent (RecordID rid, char* key, RecordID & dataRid)
 Status BTLeafPage::_Search(const char* key, RecordID & dataRid)
 {
 	RecordID curLoc, curData;
-	char * curKey = "";
+	char curKey [20]; //TODO MAKE THIS SOMETHING RELEVANT
 	if (GetFirst(curLoc, curKey, curData) != OK) return DONE;
 	while (true){
 		//if we have found the one we're looking for, good
-		if (strcmp(curKey, key) <= 0){
+		if (strcmp(curKey, key) >= 0){
 			dataRid = curLoc;
 			return OK;
 		}

@@ -148,12 +148,12 @@ bool BTreeDriver::Test1() {
 		exit(1);
 	}
 
-	if (!InsertRange(btf, 1, 50)) {
+	if (!InsertRange(btf, 1, 1 /* was 50 */)) {
 		std::cerr << "InsertRange(1, 50) failed" << std::endl;
 		res = false;
 	}
 
-	if (!TestNumLeafPages(btf, 1)) {
+	/*if (!TestNumLeafPages(btf, 1)) {
 		std::cerr << "TestNumLeafPages(1) failed" << std::endl;
 		res = false;
 	}
@@ -167,7 +167,8 @@ bool BTreeDriver::Test1() {
 	for (int i = 1; i <= 50; i++) {
 		expectedKeys.push_back(i);
 	}
-	
+	*/
+	std::vector<int> expectedKeys;
 	if (!TestScanKeys(btf, NULL, NULL, expectedKeys)) {
 		std::cerr << "TestScanKeys(NULL, NULL) failed" << std::endl;
 		res = false;
@@ -175,7 +176,7 @@ bool BTreeDriver::Test1() {
 
 	// We destroy and rebuild the file before to reduce
 	// dependence on working Delete function.
-	if (btf->DestroyFile() != OK) {
+	/*if (btf->DestroyFile() != OK) {
 		std::cerr << "Error destroying BTreeFile" << std::endl;
 		res = false;
 	}
@@ -184,7 +185,7 @@ bool BTreeDriver::Test1() {
 
 	if (res) {
 		std::cout << "Test 1 Passed!" << std::endl;
-	}
+	}*/
 	return res;
 }
 
