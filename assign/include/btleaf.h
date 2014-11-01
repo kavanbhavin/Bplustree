@@ -24,7 +24,7 @@ public:
 	
 	Status Delete (const char* key, const RecordID& dataRid);
 
-	Status _Search (const char* key, RecordID& dataRid, char * keyFound);
+	Status _Search (RecordID& rid, const char* key, RecordID& dataRid, char * keyFound);
 };
 
 #endif

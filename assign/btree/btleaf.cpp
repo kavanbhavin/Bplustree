@@ -131,8 +131,17 @@ Status BTLeafPage::GetCurrent (RecordID rid, char* key, RecordID & dataRid)
 	return OK;
 }
 
-//Search for the smallest rid that is bigger than this key. DONE if none exists.
-Status BTLeafPage::_Search(const char* key, RecordID & dataRid, char * keyFound)
+//-------------------------------------------------------------------
+// BTLeafPage::_Search
+//
+// Input   : key - minimum key
+// Output  : rid - minimum entry that is bigger than key
+//           dataRid - the record id
+//			 keyFound - minimum key that is bigger than key
+// Purpose : Search for the smallest rid that is bigger than this key.
+// Return  : DONE if none exists.
+//-------------------------------------------------------------------
+Status BTLeafPage::_Search(RecordID & rid, const char* key, RecordID & dataRid, char * keyFound)
 {
 	RecordID curLoc, curData;
 	char curKey[MAX_KEY_SIZE];
@@ -140,8 +149,8 @@ Status BTLeafPage::_Search(const char* key, RecordID & dataRid, char * keyFound)
 	while (true){
 		//if we have found the one we're looking for, good
 		if (strcmp(curKey, key) >= 0){
-			dataRid = curLoc;
-			//keyFound = curKey;	
+			dataRid = curData;
+			rid = curLoc;
 			memcpy(keyFound, curKey, strlen(curKey) + 1);
 			return OK;
 		}

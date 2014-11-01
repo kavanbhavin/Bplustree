@@ -146,10 +146,15 @@ Status BTreeFile::Insert (const char *key, const RecordID rid)
 		header->SetRootPageID(pid);
 		RecordID drid;
 		page->Insert(key, rid, drid); 
-		UNPIN(pid, (Page *&)page);
+		UNPIN(pid, false);
 		return OK;
 	}
-	return FAIL;
+	SortedPage * root;
+	PIN(header->GetRootPageID(), (Page *&) root);
+	RecordID newEntry;
+	Status r = ((BTLeafPage *)root)->Insert(key, rid, newEntry);
+	UNPIN(header->GetRootPageID(), false);
+	return r;
 }
 
 
@@ -205,14 +210,15 @@ IndexFileScan *BTreeFile::OpenScan (const char *lowKey, const char *highKey)
 		MINIBASE_BM->PinPage(firstGuy, (Page*&)lowPage);
 	}
 	//If There is a page where this exists, find the recordid it exists at
-	RecordID firstRecord;
+	RecordID dataRid;
+	RecordID rid;
 	char firstKey[MAX_KEY_SIZE];
-	firstRecord.pageNo = INVALID_PAGE;
+	rid.pageNo = INVALID_PAGE;
 	if (lowPage != NULL) {
-		lowPage->_Search(searchTerm, firstRecord, firstKey);
+		lowPage->_Search(rid, searchTerm, dataRid, firstKey);
 	}
 
-	IndexFileScan* tbr = new BTreeFileScan(lowPage, firstRecord, firstKey, highKey, (highKey != NULL));
+	IndexFileScan* tbr = new BTreeFileScan(lowPage, rid, dataRid, firstKey, highKey, (highKey != NULL));
 
 	return tbr;
 }
