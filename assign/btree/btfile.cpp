@@ -151,10 +151,72 @@ Status BTreeFile::Insert (const char *key, const RecordID rid)
 	}
 	SortedPage * root;
 	PIN(header->GetRootPageID(), (Page *&) root);
-	RecordID newEntry;
-	Status r = ((BTLeafPage *)root)->Insert(key, rid, newEntry);
-	UNPIN(header->GetRootPageID(), true);
-	return r;
+	if(root->GetType() == LEAF_NODE){
+		RecordID newEntry;
+		if (root->AvailableSpace() >= GetKeyDataLength(key, LEAF_NODE)){
+			//this means we have enough space in the leaf
+			Status r = ((BTLeafPage *)root)->Insert(key, rid, newEntry);
+			UNPIN(header->GetRootPageID(), true);
+			return r;
+		}
+		//we don't have enough space in the leaf. so its time to start indexing
+		//first we make a new root that is an index node not a leaf node
+		PageID oldrootid = header->GetRootPageID();
+		PageID newRoot;
+		BTIndexPage *newRootPage;
+		NEWPAGE(newRoot, (Page *&)newRootPage);
+		newRootPage->Init(newRoot);
+		newRootPage->SetType(INDEX_NODE);
+		header->SetRootPageID(newRoot);
+		UNPIN(header->GetRootPageID(), true);
+		//we still have leaf page pinned. let's create another leaf page to start off
+		PageID newLeaf;
+		BTLeafPage *newLeafPage;
+		NEWPAGE(newLeaf, (Page *&)newLeafPage);
+		newLeafPage->Init(newLeaf);
+		newLeafPage->SetType(INDEX_NODE);
+		//now time to start splitting
+		//we move all records from old page to new page
+		while (true) {
+			KeyType movedKey;
+			RecordID movedVal, firstRid, insertedRid;
+			Status s = ((BTLeafPage *)root)->GetFirst(firstRid, movedKey, movedVal);
+			if (s == DONE) return DONE;
+			newLeafPage->Insert(movedKey, movedVal, insertedRid);
+			((BTLeafPage *)root)->DeleteRecord(firstRid);
+		}
+		//now while old page has more space than new page we keep transferring
+		while(root->AvailableSpace() > newLeafPage->AvailableSpace()){
+			KeyType movedKey;
+			RecordID movedVal, firstRid, insertedRid;
+			Status s = newLeafPage->GetFirst(firstRid, movedKey, movedVal);
+			if(s == DONE) return DONE;
+			((BTLeafPage *)root)->Insert(movedKey, movedVal, insertedRid);
+			newLeafPage->DeleteRecord(firstRid);
+		}
+		//now we have to somewhat balanced leaf pages. we just need to add an index to the root.
+		//first we get the smallest value in the second leaf
+		KeyType smallestKey;
+		RecordID movedVal, firstRid, insertedRid;
+		Status s = newLeafPage->GetFirst(firstRid, smallestKey, movedVal);
+		if(s == DONE) return DONE;
+		// at this point we can fix our root index
+		PIN(header->GetRootPageID(), (Page *&) newRootPage);
+		newRootPage->SetLeftLink(oldrootid);
+		RecordID whythefuckdoweneedthis;
+		newRootPage->Insert(smallestKey, newRoot, whythefuckdoweneedthis); 
+		//now unpin all these pages. 
+		UNPIN(newRoot, true);
+		UNPIN(oldrootid, true);
+		UNPIN(header->GetRootPageID(), true);
+		//aside from some VERY sketchy varible naming, we should be done
+		return OK;
+	}else{
+		//figure out where to insert
+
+		UNPIN(header->GetRootPageID(), true);
+	}
+	return FAIL;
 }
 
 
