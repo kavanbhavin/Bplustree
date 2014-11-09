@@ -748,14 +748,13 @@ bool BTreeDriver::InsertRange(BTreeFile *btf, int low, int high,
 		rid.pageNo=keyNum + ridOffset;
 		rid.slotNo=keyNum + ridOffset + 1;
 		BTreeDriver::toString(keyNum, skey, pad);
-
+		
 		if (btf->Insert(skey, rid) != OK) {
 			std::cerr << "Insertion of range failed at key=" << skey
 					  << " rid=" << rid << std::endl;
 			minibase_errors.show_errors();
 			return false;
 		}
-
 		if (reverse) {
 			i--;
 		} else {
