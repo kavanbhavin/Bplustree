@@ -173,7 +173,7 @@ Status BTreeFile::Insert (const char *key, const RecordID rid)
 		BTLeafPage *newLeafPage;
 		NEWPAGE(newLeaf, (Page *&)newLeafPage);
 		newLeafPage->Init(newLeaf);
-		newLeafPage->SetType(INDEX_NODE);
+		newLeafPage->SetType(LEAF_NODE);
 		//now time to start splitting
 		//we move all records from old page to new page
 		while (true) {
