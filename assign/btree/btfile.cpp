@@ -173,7 +173,7 @@ Status BTreeFile::Insert (const char *key, const RecordID rid)
 		BTLeafPage *newLeafPage;
 		NEWPAGE(newLeaf, (Page *&)newLeafPage);
 		newLeafPage->Init(newLeaf);
-		newLeafPage->SetType(INDEX_NODE);
+		newLeafPage->SetType(LEAF_NODE);
 		//now time to start splitting
 		//we move all records from old page to new page
 		while (true) {
@@ -205,8 +205,12 @@ Status BTreeFile::Insert (const char *key, const RecordID rid)
 		// at this point we can fix our root index
 		newRootPage->SetLeftLink(oldleafid);
 		RecordID whythefuckdoweneedthis;
-		s = newRootPage->Insert(smallestKey, newRootPID, whythefuckdoweneedthis); 
+		s = newRootPage->Insert(smallestKey, newLeaf, whythefuckdoweneedthis); 
 		if(s != OK) cout << "insert failed" << std::endl;
+		//set pages to link to each other
+		root->SetNextPage(newLeaf);
+		newLeafPage->SetPrevPage(oldleafid);
+
 		//now unpin all these pages. 
 		UNPIN(oldleafid, true);
 		UNPIN(newLeaf, true);
