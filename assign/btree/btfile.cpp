@@ -137,6 +137,7 @@ Status BTreeFile::DestroyFile ()
 //-------------------------------------------------------------------
 Status BTreeFile::Insert (const char *key, const RecordID rid)
 {
+	// there are several cases to consider here. 
 	if(header->GetRootPageID() == INVALID_PAGE){
 		BTLeafPage *page;
 		PageID pid;
