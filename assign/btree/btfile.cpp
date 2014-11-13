@@ -4,6 +4,8 @@
 #include "new_error.h"
 #include "btfile.h"
 #include "btfilescan.h"
+#define CHECK(S)\
+	if(S!=OK) return S;
 
 //-------------------------------------------------------------------
 // BTreeFile::BTreeFile
@@ -81,16 +83,16 @@ BTreeFile::BTreeFile (Status& returnStatus, const char *filename) {
 //-------------------------------------------------------------------
 BTreeFile::~BTreeFile ()
 {
-    delete [] dbname;
-	
-    if (headerID != INVALID_PAGE) 
+	delete [] dbname;
+
+	if (headerID != INVALID_PAGE) 
 	{
 		Status st = MINIBASE_BM->UnpinPage (headerID, CLEAN);
 		if (st != OK)
 		{
-		cerr << "ERROR : Cannot unpin page " << headerID << " in BTreeFile::~BTreeFile" << endl;
+			cerr << "ERROR : Cannot unpin page " << headerID << " in BTreeFile::~BTreeFile" << endl;
 		}
-    }
+	}
 }
 
 
@@ -107,7 +109,7 @@ BTreeFile::~BTreeFile ()
 Status BTreeFile::DestroyFile ()
 {
 	if (header->GetRootPageID() != INVALID_PAGE){
-	//Get the root page 
+		//Get the root page 
 		SortedPage *page;
 		PIN(header->GetRootPageID(), (Page *&)page);
 		if(page->GetType() == LEAF_NODE){
@@ -125,6 +127,102 @@ Status BTreeFile::DestroyFile ()
 	return s;
 }
 
+
+//-------------------------------------------------------------------
+// BTreeFile::InsertRootIsLeaf
+//
+// Input   : key - pointer to the value of the key to be inserted.
+//           rid - RecordID of the record to be inserted.
+// Output  : None
+// Return  : OK if successful, FAIL otherwise.
+// Purpose : Insert an index entry with this rid and key.  
+//-------------------------------------------------------------------
+Status BTreeFile::InsertRootIsLeaf (const char * key, const RecordID rid, BTLeafPage *& root){
+	if (root->AvailableSpace() >= GetKeyDataLength(key, LEAF_NODE)){
+		//this means we have enough space in the leaf
+		RecordID newEntry;
+		Status r = ((BTLeafPage *)root)->Insert(key, rid, newEntry);
+		UNPIN(header->GetRootPageID(), true);
+		return r;
+	}
+	//we don't have enough space in the leaf. so its time to start indexing
+	// we store our old root page since we'll need it later
+	//only for naming ease.
+	BTLeafPage * leftLeaf = root;
+	PageID leftLeafPID = header->GetRootPageID();
+	//first we make a new leaf page
+	PageID newRightLeafPID;
+	BTLeafPage *newRightLeafPage;
+	NEWPAGE(newRightLeafPID, (Page *&)newRightLeafPage);
+	newRightLeafPage->Init(newRightLeafPID);
+	newRightLeafPage->SetType(LEAF_NODE);
+	//now time to start splitting
+	//we move all records from old page to new page
+	while (true) {
+		KeyType movedKey;
+		RecordID movedVal, firstRid, insertedRid;
+		Status s = ((BTLeafPage *)leftLeaf)->GetFirst(firstRid, movedKey, movedVal);
+		if (s == DONE) break;
+		s = newRightLeafPage->Insert(movedKey, movedVal, insertedRid);
+		CHECK(s);
+		s= leftLeaf->DeleteRecord(firstRid);
+		CHECK(s);
+	}
+	//now while left leaf has more space than right leaf we keep transferring
+	while(leftLeaf->AvailableSpace() > newRightLeafPage->AvailableSpace()){
+		KeyType movedKey;
+		RecordID movedVal, firstRid, insertedRid;
+		Status s = newRightLeafPage->GetFirst(firstRid, movedKey, movedVal);
+		CHECK(s);
+		s= leftLeaf->Insert(movedKey, movedVal, insertedRid);
+		CHECK(s);
+		s =newRightLeafPage->DeleteRecord(firstRid);
+		CHECK(s);
+	}
+	//now we have somewhat balanced leaf pages. we just need to add an index to the root.
+	//first we get the smallest value in the right leaf
+	KeyType smallestKey;
+	RecordID movedVal, firstRid;
+	Status s = ((BTLeafPage *)newRightLeafPage)->GetFirst(firstRid, smallestKey, movedVal);
+	CHECK(s);
+	//now we make a new root that is an index node not a leaf node
+	PageID newRootPID;
+	BTIndexPage *newRootPage;
+	NEWPAGE(newRootPID, (Page *&)newRootPage);
+	newRootPage->Init(newRootPID);
+	newRootPage->SetType(INDEX_NODE);
+	header->SetRootPageID(newRootPID);
+	//now we set it up as an index
+	newRootPage->SetLeftLink(leftLeafPID);
+	RecordID dontcare;
+	s = newRootPage->Insert(smallestKey, newRightLeafPID, dontcare); 
+	CHECK(s);
+	//set pages to link to each other
+	leftLeaf->SetNextPage(newRightLeafPID);
+	newRightLeafPage->SetPrevPage(leftLeafPID);
+	PageID firstChildPID;
+	KeyType firstKey;
+	s = newRootPage->GetFirst(dontcare, firstKey, firstChildPID);
+	CHECK(s);
+	if(KeyCmp(key,firstKey) <0) {
+		//insert into firstChildpid
+		s = leftLeaf->Insert(key, rid, dontcare);
+		CHECK(s);
+	}else{
+		s = newRightLeafPage->Insert(key,rid,dontcare);
+		CHECK(s);
+	}
+	//now unpin all these pages. 
+	UNPIN(leftLeafPID, true);
+	UNPIN(newRightLeafPID, true);
+	UNPIN(header->GetRootPageID(), true);
+	return OK;
+
+}
+
+
+
+
 //-------------------------------------------------------------------
 // BTreeFile::Insert
 //
@@ -138,6 +236,7 @@ Status BTreeFile::DestroyFile ()
 Status BTreeFile::Insert (const char *key, const RecordID rid)
 {
 	// there are several cases to consider here. 
+	//first case is that this is the first insert
 	if(header->GetRootPageID() == INVALID_PAGE){
 		BTLeafPage *page;
 		PageID pid;
@@ -150,83 +249,12 @@ Status BTreeFile::Insert (const char *key, const RecordID rid)
 		UNPIN(pid, false);
 		return OK;
 	}
+	//otherwise we get the root. we don't know its type yet.
 	SortedPage * oldRoot;
 	PIN(header->GetRootPageID(), (Page *&) oldRoot);
 	if(oldRoot->GetType() == LEAF_NODE){
-		RecordID newEntry;
-		if (oldRoot->AvailableSpace() >= GetKeyDataLength(key, LEAF_NODE)){
-			//this means we have enough space in the leaf
-			Status r = ((BTLeafPage *)oldRoot)->Insert(key, rid, newEntry);
-			UNPIN(header->GetRootPageID(), true);
-			return r;
-		}
-		//we don't have enough space in the leaf. so its time to start indexing
-		// we store our old root page since we'll need it later
-		PageID oldleafid = header->GetRootPageID();
-		//first we make a new root that is an index node not a leaf node
-		PageID newRootPID;
-		BTIndexPage *newRootPage;
-		NEWPAGE(newRootPID, (Page *&)newRootPage);
-		newRootPage->Init(newRootPID);
-		newRootPage->SetType(INDEX_NODE);
-		header->SetRootPageID(newRootPID);
-		PageID newLeaf;
-		BTLeafPage *newLeafPage;
-		NEWPAGE(newLeaf, (Page *&)newLeafPage);
-		newLeafPage->Init(newLeaf);
-		newLeafPage->SetType(LEAF_NODE);
-		//now time to start splitting
-		//we move all records from old page to new page
-		while (true) {
-			KeyType movedKey;
-			RecordID movedVal, firstRid, insertedRid;
-			Status s = ((BTLeafPage *)oldRoot)->GetFirst(firstRid, movedKey, movedVal);
-			if (s == DONE) break;
-			newLeafPage->Insert(movedKey, movedVal, insertedRid);
-			((BTLeafPage *)oldRoot)->DeleteRecord(firstRid);
-		}
-
-		//now while old page has more space than new page we keep transferring
-		while(oldRoot->AvailableSpace() > newLeafPage->AvailableSpace()){
-			KeyType movedKey;
-			RecordID movedVal, firstRid, insertedRid;
-			Status s = newLeafPage->GetFirst(firstRid, movedKey, movedVal);
-			if(s == DONE) {
-				cout << "this should never happen" << std::endl;
-				return DONE;
-			}
-			((BTLeafPage *)oldRoot)->Insert(movedKey, movedVal, insertedRid);
-			newLeafPage->DeleteRecord(firstRid);
-		}
-
-		//now we have to somewhat balanced leaf pages. we just need to add an index to the root.
-		//first we get the smallest value in the second leaf
-		KeyType smallestKey;
-		RecordID movedVal, firstRid, insertedRid;
-		Status s = ((BTLeafPage *)newLeafPage)->GetFirst(firstRid, smallestKey, movedVal);
-		if(s == DONE) return DONE;
-		// at this point we can fix our root index
-		newRootPage->SetLeftLink(oldleafid);
-		RecordID dontcare;
-		s = newRootPage->Insert(smallestKey, newLeaf, dontcare); 
-		if(s != OK) cout << "insert failed" << std::endl;
-		//set pages to link to each other
-		oldRoot->SetNextPage(newLeaf);
-		newLeafPage->SetPrevPage(oldleafid);
-		PageID firstChildPid;
-		KeyType firstKey;
-		newRootPage->GetFirst(dontcare, firstKey, firstChildPid);
-		if(KeyCmp(key,firstKey) <0) {
-		//insert into firstChildpid
-			((BTLeafPage *)oldRoot)->Insert(key, rid, dontcare);
-		}else{
-			newLeafPage->Insert(key,rid,dontcare);
-		}
-		//now unpin all these pages. 
-		UNPIN(oldleafid, true);
-		UNPIN(newLeaf, true);
-		UNPIN(header->GetRootPageID(), true);
-		//aside from some VERY sketchy varible naming, we should be done
+		Status s = InsertRootIsLeaf(key, rid, (BTLeafPage *&)oldRoot);
+		CHECK(s);
 		return OK;
 	}else{
 		//figure out where to insert
@@ -321,7 +349,7 @@ Status BTreeFile::DumpStatistics() {
 	ostream& os = std::cout;
 	float avgDataFillFactor, avgIndexFillFactor;
 
-// initialization 
+	// initialization 
 	hight = totalDataPages = totalIndexPages = totalNumIndex = totalNumData = 0;
 	maxDataFillFactor = maxIndexFillFactor = 0; minDataFillFactor = minIndexFillFactor =1;
 	totalFillData = totalFillIndex = 0;
@@ -481,13 +509,13 @@ Status BTreeFile::__DumpStatistics (PageID pageID) {
 Status BTreeFile::_SearchIndex (const char *key,  PageID currIndexID, BTIndexPage *currIndex, PageID& foundID)
 {
 	PageID nextPageID;
-	
+
 	Status s = currIndex->GetPageID (key, nextPageID);
 	if (s != OK)
 		return FAIL;
-	
+
 	// Now unpin the page, recurse and then pin it again
-	
+
 	UNPIN (currIndexID, CLEAN);
 	s = _Search (key, nextPageID, foundID);
 	if (s != OK)
@@ -501,25 +529,25 @@ Status BTreeFile::_SearchIndex (const char *key,  PageID currIndexID, BTIndexPag
 // Purpose	: find the leftmost leaf page contain the key, or bigger than the key
 Status BTreeFile::_Search( const char *key,  PageID currID, PageID& foundID)
 {
-	
-    SortedPage *page;
+
+	SortedPage *page;
 	Status s;
-	
-    PIN (currID, page);
-    NodeType type = page->GetType ();
-	
-    // TWO CASES:
-    // - pageType == INDEX:
-    //   search the index
-    // - pageType == LEAF_NODE:
-    //   set the output page ID
-	
-    switch (type) 
+
+	PIN (currID, page);
+	NodeType type = page->GetType ();
+
+	// TWO CASES:
+	// - pageType == INDEX:
+	//   search the index
+	// - pageType == LEAF_NODE:
+	//   set the output page ID
+
+	switch (type) 
 	{
 	case INDEX_NODE:
 		s =	_SearchIndex(key,  currID, (BTIndexPage*)page, foundID);
 		break;
-		
+
 	case LEAF_NODE:
 		foundID =  page->PageNo();
 		UNPIN(currID,CLEAN);
@@ -543,11 +571,11 @@ Status BTreeFile:: Search(const char *key,  PageID& foundPid)
 	{
 		foundPid = INVALID_PAGE;
 		return DONE;
-		
+
 	}
 
 	Status s;
-	
+
 	s = _Search(key,  header->GetRootPageID(), foundPid);
 	if (s != OK)
 	{
@@ -574,55 +602,55 @@ Status BTreeFile::_PrintTree ( PageID pageID)
 
 	ostream& os = cout;
 
-    PIN (pageID, page);
-    NodeType type = page->GetType ();
+	PIN (pageID, page);
+	NodeType type = page->GetType ();
 	i = 0;
-      switch (type) 
+	switch (type) 
 	{
 	case INDEX_NODE:
-			index = (BTIndexPage *)page;
-			curPageID = index->GetLeftLink();
-			os << "\n---------------- Content of Index_Node-----   " << pageID <<endl;
-			os << "\n Left most PageID:  "  << curPageID << endl;
-			s=index->GetFirst (curRid , key, curPageID); 
-			if ( s == OK)
-			{	i++;
-				os <<"Key: "<< key<< "	PageID: " 
-					<< curPageID  << endl;
-				s = index->GetNext(curRid, key, curPageID);
-				while ( s != DONE)
-				{	
-					os <<"Key: "<< key<< "	PageID: " 
-						<< curPageID  << endl;
-					i++;
-					s = index->GetNext(curRid, key, curPageID);
+		index = (BTIndexPage *)page;
+		curPageID = index->GetLeftLink();
+		os << "\n---------------- Content of Index_Node-----   " << pageID <<endl;
+		os << "\n Left most PageID:  "  << curPageID << endl;
+		s=index->GetFirst (curRid , key, curPageID); 
+		if ( s == OK)
+		{	i++;
+		os <<"Key: "<< key<< "	PageID: " 
+			<< curPageID  << endl;
+		s = index->GetNext(curRid, key, curPageID);
+		while ( s != DONE)
+		{	
+			os <<"Key: "<< key<< "	PageID: " 
+				<< curPageID  << endl;
+			i++;
+			s = index->GetNext(curRid, key, curPageID);
 
-				}
-			}
-			os << "\n This page contains  " << i <<"  Entries!" << endl;
-			UNPIN(pageID, CLEAN);
-			break;
-		
+		}
+		}
+		os << "\n This page contains  " << i <<"  Entries!" << endl;
+		UNPIN(pageID, CLEAN);
+		break;
+
 	case LEAF_NODE:
 		leaf = (BTLeafPage *)page;
 		s = leaf->GetFirst (curRid, key, dataRid);
-			if ( s == OK)
-			{	os << "\n Content of Leaf_Node"  << pageID << endl;
-				os <<   "Key: "<< key<< "	DataRecordID: " 
-					<< dataRid  << endl;
-				s = leaf->GetNext(curRid, key, dataRid);
-				i++;
-				while ( s != DONE)
-				{	
-					os <<   "Key: "<< key<< "	DataRecordID: " 
-						<< dataRid  << endl;
-					i++;	
-					s = leaf->GetNext(curRid, key, dataRid);
-				}
-			}
-			os << "\n This page contains  " << i <<"  entries!" << endl;
-			UNPIN(pageID, CLEAN);
-			break;
+		if ( s == OK)
+		{	os << "\n Content of Leaf_Node"  << pageID << endl;
+		os <<   "Key: "<< key<< "	DataRecordID: " 
+			<< dataRid  << endl;
+		s = leaf->GetNext(curRid, key, dataRid);
+		i++;
+		while ( s != DONE)
+		{	
+			os <<   "Key: "<< key<< "	DataRecordID: " 
+				<< dataRid  << endl;
+			i++;	
+			s = leaf->GetNext(curRid, key, dataRid);
+		}
+		}
+		os << "\n This page contains  " << i <<"  entries!" << endl;
+		UNPIN(pageID, CLEAN);
+		break;
 	default:		
 		assert (0);
 	}
@@ -645,9 +673,9 @@ Status BTreeFile::PrintTree ( PageID pageID, PrintOption option)
 	RecordID curRid;
 	KeyType  key;
 
-    PIN (pageID, page);
-    NodeType type = page->GetType ();
-	
+	PIN (pageID, page);
+	NodeType type = page->GetType ();
+
 	switch (type) {
 	case INDEX_NODE:
 		index = (BTIndexPage *)page;

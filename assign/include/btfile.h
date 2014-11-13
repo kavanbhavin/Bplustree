@@ -82,7 +82,7 @@ private:
 	Status BTreeFile::__DumpStatistics(PageID);
 
 	// You may add members and methods here.
-
+	Status BTreeFile::InsertRootIsLeaf(const char * key, const RecordID rid, BTLeafPage *& oldRoot);
 };
 
 
