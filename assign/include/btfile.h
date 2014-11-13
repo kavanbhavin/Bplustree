@@ -87,6 +87,7 @@ private:
 		KeyType key;
 		PageID value;
 	};
+	Status BTreeFile::Insert();
 	Status BTreeFile::InsertIntoIndex(const char * key, RecordID rid, BTIndexPage* curPage, IndexEntry *&newEntry);
 	Status BTreeFile::InsertIntoLeaf(const char * key, RecordID rid, BTLeafPage* curPage, IndexEntry *&newEntry);
 	Status BTreeFile::RebalanceLeaf(BTLeafPage* leftPage, BTLeafPage* rightPage);
