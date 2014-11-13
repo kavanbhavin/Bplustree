@@ -83,6 +83,13 @@ private:
 
 	// You may add members and methods here.
 	Status BTreeFile::InsertRootIsLeaf(const char * key, const RecordID rid, BTLeafPage *& oldRoot);
+	struct IndexEntry {
+		KeyType key;
+		PageID value;
+	};
+	Status BTreeFile::InsertIntoIndex(const char * key, RecordID rid, BTIndexPage* curPage, IndexEntry *&newEntry);
+	Status BTreeFile::InsertIntoLeaf(const char * key, RecordID rid, BTLeafPage* curPage, IndexEntry *&newEntry);
+	Status BTreeFile::RebalanceLeaf(BTLeafPage* leftPage, BTLeafPage* rightPage);
 };
 
 
