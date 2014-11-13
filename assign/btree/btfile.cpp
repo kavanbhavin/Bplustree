@@ -150,13 +150,13 @@ Status BTreeFile::Insert (const char *key, const RecordID rid)
 		UNPIN(pid, false);
 		return OK;
 	}
-	SortedPage * root;
-	PIN(header->GetRootPageID(), (Page *&) root);
-	if(root->GetType() == LEAF_NODE){
+	SortedPage * oldRoot;
+	PIN(header->GetRootPageID(), (Page *&) oldRoot);
+	if(oldRoot->GetType() == LEAF_NODE){
 		RecordID newEntry;
-		if (root->AvailableSpace() >= GetKeyDataLength(key, LEAF_NODE)){
+		if (oldRoot->AvailableSpace() >= GetKeyDataLength(key, LEAF_NODE)){
 			//this means we have enough space in the leaf
-			Status r = ((BTLeafPage *)root)->Insert(key, rid, newEntry);
+			Status r = ((BTLeafPage *)oldRoot)->Insert(key, rid, newEntry);
 			UNPIN(header->GetRootPageID(), true);
 			return r;
 		}
@@ -180,13 +180,14 @@ Status BTreeFile::Insert (const char *key, const RecordID rid)
 		while (true) {
 			KeyType movedKey;
 			RecordID movedVal, firstRid, insertedRid;
-			Status s = ((BTLeafPage *)root)->GetFirst(firstRid, movedKey, movedVal);
+			Status s = ((BTLeafPage *)oldRoot)->GetFirst(firstRid, movedKey, movedVal);
 			if (s == DONE) break;
 			newLeafPage->Insert(movedKey, movedVal, insertedRid);
-			((BTLeafPage *)root)->DeleteRecord(firstRid);
+			((BTLeafPage *)oldRoot)->DeleteRecord(firstRid);
 		}
+
 		//now while old page has more space than new page we keep transferring
-		while(root->AvailableSpace() > newLeafPage->AvailableSpace()){
+		while(oldRoot->AvailableSpace() > newLeafPage->AvailableSpace()){
 			KeyType movedKey;
 			RecordID movedVal, firstRid, insertedRid;
 			Status s = newLeafPage->GetFirst(firstRid, movedKey, movedVal);
@@ -194,20 +195,33 @@ Status BTreeFile::Insert (const char *key, const RecordID rid)
 				cout << "this should never happen" << std::endl;
 				return DONE;
 			}
-			((BTLeafPage *)root)->Insert(movedKey, movedVal, insertedRid);
+			((BTLeafPage *)oldRoot)->Insert(movedKey, movedVal, insertedRid);
 			newLeafPage->DeleteRecord(firstRid);
 		}
+
 		//now we have to somewhat balanced leaf pages. we just need to add an index to the root.
 		//first we get the smallest value in the second leaf
 		KeyType smallestKey;
 		RecordID movedVal, firstRid, insertedRid;
-		Status s = ((BTLeafPage *)root)->GetFirst(firstRid, smallestKey, movedVal);
+		Status s = ((BTLeafPage *)newLeafPage)->GetFirst(firstRid, smallestKey, movedVal);
 		if(s == DONE) return DONE;
 		// at this point we can fix our root index
 		newRootPage->SetLeftLink(oldleafid);
-		RecordID whythefuckdoweneedthis;
-		s = newRootPage->Insert(smallestKey, newRootPID, whythefuckdoweneedthis); 
+		RecordID dontcare;
+		s = newRootPage->Insert(smallestKey, newLeaf, dontcare); 
 		if(s != OK) cout << "insert failed" << std::endl;
+		//set pages to link to each other
+		oldRoot->SetNextPage(newLeaf);
+		newLeafPage->SetPrevPage(oldleafid);
+		PageID firstChildPid;
+		KeyType firstKey;
+		newRootPage->GetFirst(dontcare, firstKey, firstChildPid);
+		if(KeyCmp(key,firstKey) <0) {
+		//insert into firstChildpid
+			((BTLeafPage *)oldRoot)->Insert(key, rid, dontcare);
+		}else{
+			newLeafPage->Insert(key,rid,dontcare);
+		}
 		//now unpin all these pages. 
 		UNPIN(oldleafid, true);
 		UNPIN(newLeaf, true);
