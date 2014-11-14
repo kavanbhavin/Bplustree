@@ -127,55 +127,9 @@ Status BTreeFile::DestroyFile ()
 	Status s = MINIBASE_DB -> DeleteFileEntry(dbname);
 	return s;
 }
-//Given a page id of a child, insert into him.
-Status BTreeFile::InsertIntoChild(const char * key, RecordID rid, BTIndexPage* curPage, IndexEntry *&newEntry, PageID childPID){
-	SortedPage * childPage;
-	PIN(childPID, (Page *&) childPage);
-	if(childPage->GetType()== INDEX_NODE){
-		Status s= InsertIntoIndex(key, rid, (BTIndexPage *)childPage, newEntry);
-		CHECK(s);
-		CHECK_NEW_ENTRY(newEntry);
-		if(curPage->AvailableSpace() >= GetKeyDataLength(newEntry->key, INDEX_NODE)){
-			RecordID dontcare;
-			s = curPage->Insert(newEntry->key, newEntry->value, dontcare);
-			UNPIN(curPage->PageNo(), true);
-			newEntry->value=INVALID_PAGE;
-			return s;
-		}
-		//now enough space in current index. split and push upwards.
-		PageID newRightIndexPID;
-		BTIndexPage * newRightIndexPage;
-		NEWPAGE(newRightIndexPID, (Page *&) newRightIndexPage);
-		s =RebalanceIndex(newRightIndexPage, curPage, newEntry);
-		UNPIN(curPage->PageNo(), true);
-		return s;
-	}
-	else if(childPage->GetType() ==LEAF_NODE){
-		UNPIN(curPage->PageNo(), false);
-		Status s= InsertIntoLeaf(key,rid, (BTLeafPage *)childPage, newEntry);
-		CHECK(s);
-		CHECK_NEW_ENTRY(newEntry);
-		if(curPage->AvailableSpace() >= GetKeyDataLength(newEntry->key, INDEX_NODE)){
-			RecordID dontcare;
-			Status s = curPage->Insert(newEntry->key, newEntry->value, dontcare);
-			UNPIN(curPage->PageNo(), true);
-			newEntry->value=INVALID_PAGE;
-			return s;
-		}
-		//now enough space in current index. split and push upwards.
-		PageID newRightIndexPID;
-		BTIndexPage * newRightIndexPage;
-		NEWPAGE(newRightIndexPID, (Page *&) newRightIndexPage);
-		s =RebalanceIndex(newRightIndexPage, curPage, newEntry);
-		UNPIN(curPage->PageNo(), true);
-		return s;
-	}else{
-		cout << "Pinned page that was invalid during insert index" << endl;
-		return FAIL;
-	}
-}
+
 //Rebalances index according to slides and returns index to push up.
-//TODO set left link 
+//caller must set left link
 Status BTreeFile::RebalanceIndex(BTIndexPage* leftPage, BTIndexPage* rightPage, IndexEntry *& indexToPush){
 	KeyType movedKey;
 	PageID pointerToChild;
@@ -216,23 +170,50 @@ Status BTreeFile::RebalanceIndex(BTIndexPage* leftPage, BTIndexPage* rightPage, 
 // Return  : OK if successful, FAIL otherwise.
 // Purpose : Insert a key,rid pair into an index 
 //-------------------------------------------------------------------
-Status BTreeFile::InsertIntoIndex(const char * key, RecordID rid, BTIndexPage* curPage, IndexEntry *&newEntry){
-	//TODO figure out how to deal with splitting and abstract pinning child
+Status BTreeFile::InsertIntoIndex(const char * key, const RecordID rid, BTIndexPage* curPage, IndexEntry *&newEntry){
 	RecordID currRid;
-	PageID pointerToChild;
+	PageID prevPointerToChild;
 	KeyType currKey;
-	Status s = curPage->GetFirst(currRid, currKey, pointerToChild);
+	Status s = curPage->GetFirst(currRid, currKey, prevPointerToChild);
 	CHECK(s);
+	SortedPage * childPage;
 	if(KeyCmp(key, currKey) <0){
-		return InsertIntoChild(key, rid, curPage, newEntry, pointerToChild);
-	}
-	while(curPage->GetNext(currRid, currKey, pointerToChild)!=DONE){
-		if(KeyCmp(key, currKey) <0){
-			return InsertIntoChild(key, rid, curPage, newEntry, pointerToChild);
+		PIN(prevPointerToChild, childPage);
+	}else{
+		PageID nextPointerToChild;
+		while(curPage->GetNext(currRid, currKey, nextPointerToChild)!=DONE){
+			if(KeyCmp(key, currKey) <0){
+				PIN(prevPointerToChild, childPage);
+				break;
+			}
+			prevPointerToChild = nextPointerToChild;
 		}
 	}
-	//at this point we are higher than the highest index, so we must go to the last child.
-	return InsertIntoChild(key, rid, curPage, newEntry, pointerToChild);
+	if(childPage->GetType() ==INDEX_NODE){
+		s = InsertIntoIndex(key, rid, ((BTIndexPage *)childPage), newEntry); 
+	}else if(childPage->GetType()==LEAF_NODE){
+		s = InsertIntoLeaf(key, rid, ((BTLeafPage *)childPage), newEntry);
+	}else {
+		cout << "page of invalid type in InsertIntoIndex" << endl;
+	}
+	CHECK(s);
+	UNPIN(childPage->PageNo(), true);
+	if(newEntry !=NULL){
+		if(curPage->AvailableSpace() >= GetKeyDataLength(newEntry->key, INDEX_NODE)){
+			RecordID dontcare;
+			s = curPage->Insert(newEntry->key, newEntry->value, dontcare);
+			newEntry=NULL;
+		}else{
+			BTIndexPage * newRightIndexPage;
+			PageID newRightIndexPID;
+			NEWPAGE(newRightIndexPID, newRightIndexPage);
+			newRightIndexPage->Init(newRightIndexPID);
+			newRightIndexPage->SetType(INDEX_NODE);
+			RebalanceIndex(curPage, newRightIndexPage, newEntry);
+			UNPIN(newRightIndexPID, true);
+		}
+	}
+	return s;
 }
 //-------------------------------------------------------------------
 // BTreeFile::InsertIntoLeaf
@@ -244,20 +225,23 @@ Status BTreeFile::InsertIntoIndex(const char * key, RecordID rid, BTIndexPage* c
 // Return  : OK if successful, FAIL otherwise.
 // Purpose : Insert a key,rid pair into an leaf 
 //-------------------------------------------------------------------
-Status BTreeFile::InsertIntoLeaf(const char * key, RecordID rid, BTLeafPage* curPage, IndexEntry *&newEntry){
+Status BTreeFile::InsertIntoLeaf(const char * key, const RecordID rid, BTLeafPage* curPage, IndexEntry *&newEntry){
 	if(curPage->AvailableSpace() >= GetKeyDataLength(key, LEAF_NODE)){
 		RecordID rid;
 		Status r = curPage ->Insert(key, rid, rid);
 		CHECK(r);
-		newEntry->value = INVALID_PAGE;
+		newEntry=NULL;
 		return r;
 	}
 	//not enough space, time to split.
 	PageID newRightLeafPID;
 	BTLeafPage * newRightLeafPage;
-	NEWPAGE(newRightLeafPID, (Page *&)newRightLeafPage);
+	NEWPAGE(newRightLeafPID, newRightLeafPage);
+	newRightLeafPage->Init(newRightLeafPID);
+	newRightLeafPage->SetType(LEAF_NODE);
 	Status s = RebalanceLeaf(curPage, newRightLeafPage);
 	CHECK(s);
+	newEntry = new IndexEntry;
 	newEntry->value = newRightLeafPID;
 	RecordID dontcare;
 	KeyType smallestKey;
@@ -268,6 +252,7 @@ Status BTreeFile::InsertIntoLeaf(const char * key, RecordID rid, BTLeafPage* cur
 		newEntry->key[i] = smallestKey[i];
 	}
 	//memcpy(newEntry->key, smallestKey, sizeof(KeyType));
+	UNPIN(newRightLeafPID, true);
 	return OK;
 }
 
@@ -296,7 +281,7 @@ Status BTreeFile::InsertRootIsLeaf (const char * key, const RecordID rid, BTLeaf
 	//first we make a new leaf page
 	PageID newRightLeafPID;
 	BTLeafPage *newRightLeafPage;
-	NEWPAGE(newRightLeafPID, (Page *&)newRightLeafPage);
+	NEWPAGE(newRightLeafPID, newRightLeafPage);
 	newRightLeafPage->Init(newRightLeafPID);
 	newRightLeafPage->SetType(LEAF_NODE);
 	//now time to start splitting
@@ -306,12 +291,12 @@ Status BTreeFile::InsertRootIsLeaf (const char * key, const RecordID rid, BTLeaf
 	//first we get the smallest value in the right leaf
 	KeyType smallestKey;
 	RecordID movedVal, firstRid;
-	Status s = ((BTLeafPage *)newRightLeafPage)->GetFirst(firstRid, smallestKey, movedVal);
+	Status s = newRightLeafPage->GetFirst(firstRid, smallestKey, movedVal);
 	CHECK(s);
 	//now we make a new root that is an index node not a leaf node
 	PageID newRootPID;
 	BTIndexPage *newRootPage;
-	NEWPAGE(newRootPID, (Page *&)newRootPage);
+	NEWPAGE(newRootPID, newRootPage);
 	newRootPage->Init(newRootPID);
 	newRootPage->SetType(INDEX_NODE);
 	header->SetRootPageID(newRootPID);
@@ -395,7 +380,7 @@ Status BTreeFile::Insert (const char *key, const RecordID rid)
 	if(header->GetRootPageID() == INVALID_PAGE){
 		BTLeafPage *page;
 		PageID pid;
-		NEWPAGE(pid, (Page *&)page);
+		NEWPAGE(pid, page);
 		page->Init(pid);
 		page->SetType(LEAF_NODE);
 		header->SetRootPageID(pid);
@@ -411,15 +396,73 @@ Status BTreeFile::Insert (const char *key, const RecordID rid)
 		Status s = InsertRootIsLeaf(key, rid, (BTLeafPage *&)oldRoot);
 		CHECK(s);
 		return OK;
-	}else{
+	}else if (oldRoot->GetType()==INDEX_NODE){
 		//root is index. so we must traverse index.
 		//figure out where to insert
-
+		Status s = InsertRootIsIndex(key, rid, (BTIndexPage*)oldRoot);
+		UNPIN(oldRoot->PageNo(), true);
+		return s;
 	}
+	cout << "root is not index or leaf?" << endl;
 	return FAIL;
 }
+//note it is always responsibility of calling function to pin and unpin
+Status BTreeFile::InsertRootIsIndex(const char * key, const RecordID rid, BTIndexPage * root){
+	RecordID currRid;
+	PageID prevPointerToChild;
+	KeyType currKey;
+	Status s = root->GetFirst(currRid, currKey, prevPointerToChild);
+	CHECK(s);
+	SortedPage * childPage;
+	if(KeyCmp(key, currKey) <0){
+		PIN(prevPointerToChild, childPage);
+	}else{
+		PageID nextPointerToChild;
+		while(root->GetNext(currRid, currKey, nextPointerToChild)!=DONE){
+			if(KeyCmp(key, currKey) <0) break;
+			prevPointerToChild = nextPointerToChild;
+		}
+		PIN(prevPointerToChild, childPage);
 
-
+	}
+	IndexEntry *newEntry = NULL;
+	if(childPage->GetType() ==INDEX_NODE){
+		s = InsertIntoIndex(key, rid, ((BTIndexPage *)childPage), newEntry); 
+	}else if(childPage->GetType()==LEAF_NODE){
+		s = InsertIntoLeaf(key, rid, ((BTLeafPage *)childPage), newEntry);
+	}else {
+		cout << "page of invalid type in InsertIntoIndex" << endl;
+	}
+	UNPIN(prevPointerToChild, true);
+	CHECK(s);
+	if(newEntry !=NULL){
+		RecordID dontcare;
+		if(root->AvailableSpace() >= GetKeyDataLength(newEntry->key, INDEX_NODE)){
+			s = root->Insert(newEntry->key, newEntry->value, dontcare);
+			return s;
+		}
+		//time to create new root
+		PageID newRootPID;
+		BTIndexPage *newRootPage;
+		NEWPAGE(newRootPID, newRootPage);
+		newRootPage->Init(newRootPID);
+		newRootPage->SetType(INDEX_NODE);
+		header->SetRootPageID(newRootPID);
+		newRootPage->SetPrevPage(root->PageNo());
+		PageID newRightIndexPID;
+		BTIndexPage *newRightIndexPage;
+		NEWPAGE(newRightIndexPID, newRightIndexPage);
+		newRightIndexPage->Init(newRightIndexPID);
+		IndexEntry *newKey = NULL;
+		RebalanceIndex(root, newRightIndexPage, newKey);
+		s = newRootPage->Insert(newKey->key, newKey->value, dontcare);
+		UNPIN(newRightIndexPID, true);
+		UNPIN(newRootPID, true);
+		delete newKey;
+	}
+	delete newEntry;
+	return s;
+}
 
 //-------------------------------------------------------------------
 // BTreeFile::Delete
