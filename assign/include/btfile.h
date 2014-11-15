@@ -36,6 +36,7 @@ public:
 	Status PrintTree (PageID pageID, PrintOption option);
 	Status PrintWhole ();
 	Status DumpStatistics();
+	Status toString();
 
 private:
 
@@ -56,6 +57,7 @@ private:
 			PageID *ptr = (PageID *)(HeapPage::data);
 			*ptr = pid;
 		}
+
     };
 
 	BTreeHeaderPage *header;   // header page

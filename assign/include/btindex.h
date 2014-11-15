@@ -29,6 +29,8 @@ public:
 	    
 	Status FindKey (char *key, char *entry);
 	Status AdjustKey (const char *newKey, const char *oldKey);
+
+	void toString();
 };
 
 #endif

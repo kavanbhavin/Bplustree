@@ -1,5 +1,20 @@
 #include "btleaf.h"
 
+void BTLeafPage::toString(){
+	cout << "Leaf Page : ";
+	RecordID overallRid, dataRid;
+	char* key;
+	GetFirst(overallRid, key, dataRid);
+	cout << key;
+	Status s = OK;
+	while (true) { 
+		s = GetNext(overallRid, key, dataRid);
+		if (s == DONE) break;
+		cout << key;
+	}
+	cout << "\n";
+}
+
 
 //-------------------------------------------------------------------
 // BTLeafPage::InsertRecord

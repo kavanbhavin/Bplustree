@@ -1,6 +1,34 @@
 #include <string.h>
 #include "btindex.h"
+#include "minirel.h"
+#include "bufmgr.h"
+#include "db.h"
+#include "new_error.h"
+#include "btfile.h"
+#include "btfilescan.h"
 
+
+void BTIndexPage::toString(){
+	cout << "Index Page : ";
+	PageID leftLink = GetLeftLink();
+	if (leftLink == INVALID_PAGE) return;
+	Page* leftGuy;
+	MINIBASE_BM->PinPage(leftLink, leftGuy);
+	SortedPage* leftGuyS = (SortedPage*)leftGuy;
+	if (leftGuyS->GetType() == INDEX_NODE){
+		((BTIndexPage*)leftGuyS)->toString();
+	}
+	else {
+		((BTLeafPage*)leftGuyS)->toString();
+	}
+	MINIBASE_BM->UnpinPage(leftLink, false);
+
+	RecordID ourRid;
+	char* key;
+	PageID nextGuyId;
+	GetFirst(ourRid, key, nextGuyId);
+	cout << key;
+}
 
 //-------------------------------------------------------------------
 // BTIndexPage::InsertKey

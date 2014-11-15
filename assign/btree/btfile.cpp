@@ -8,6 +8,23 @@
 	if(S!=OK) return S;
 #define CHECK_NEW_ENTRY(NE)\
 	if(NE->value == INVALID_PAGE) return OK
+
+Status BTreeFile::toString(){
+	SortedPage* root;
+	PIN(header->GetRootPageID(), root);
+	if (root->GetType() == INDEX_NODE){
+		BTIndexPage* ri = (BTIndexPage*)root;
+		ri->toString();
+	}
+	else if (root->GetType() == LEAF_NODE){
+		BTLeafPage* rl = (BTLeafPage*)root;
+		rl->toString();
+	}
+	else{
+		cout << "ToString : Root not index or leaf!";
+	}
+	UNPIN(header->GetRootPageID(), false);
+}
 //-------------------------------------------------------------------
 // BTreeFile::BTreeFile
 //
