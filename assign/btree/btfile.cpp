@@ -323,9 +323,6 @@ Status BTreeFile::InsertRootIsLeaf (const char * key, const RecordID rid, BTLeaf
 	RecordID dontcare;
 	s = newRootPage->Insert(smallestKey, newRightLeafPID, dontcare); 
 	CHECK(s);
-	//set pages to link to each other
-	leftLeaf->SetNextPage(newRightLeafPID);
-	newRightLeafPage->SetPrevPage(leftLeafPID);
 	PageID firstChildPID;
 	KeyType firstKey;
 	s = newRootPage->GetFirst(dontcare, firstKey, firstChildPID);
@@ -376,6 +373,9 @@ Status BTreeFile::RebalanceLeaf(BTLeafPage* leftPage, BTLeafPage* rightPage){
 		s =rightPage->DeleteRecord(firstRid);
 		CHECK(s);
 	}
+	rightPage->SetNextPage(leftPage->GetNextPage());
+	leftPage->SetNextPage(rightPage->PageNo());
+	rightPage->SetPrevPage(leftPage->PageNo());
 	return OK;
 }
 
@@ -505,8 +505,9 @@ Status BTreeFile::Delete (const char *key, const RecordID rid)
 		Status  r = ((BTLeafPage *)root)->Delete(key, rid);
 		UNPIN(header->GetRootPageID(), true);
 		return r;
+	}else{
+		((BTIndexPage *)root)->Delete(key, rid);
 	}
-	//if root is not leaf, fail for NOW
 	return FAIL;
 }
 
