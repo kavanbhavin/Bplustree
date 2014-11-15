@@ -133,7 +133,7 @@ Status BTreeFile::DestroyFile ()
 Status BTreeFile::RebalanceIndex(BTIndexPage* leftPage, BTIndexPage* rightPage, IndexEntry *& indexToPush){
 	KeyType movedKey;
 	PageID pointerToChild;
-	RecordID movedVal, firstRid, insertedRid, dontcare;
+	RecordID firstRid, dontcare;
 	while (true) {
 		Status s = leftPage->GetFirst(firstRid, movedKey, pointerToChild);
 		if (s == DONE) break;
@@ -141,12 +141,6 @@ Status BTreeFile::RebalanceIndex(BTIndexPage* leftPage, BTIndexPage* rightPage, 
 		CHECK(s);
 		s= leftPage->DeleteRecord(firstRid);
 		CHECK(s);
-	}
-	Status s = rightPage ->GetFirst(firstRid, movedKey, pointerToChild);
-	CHECK(s);
-	indexToPush->value = pointerToChild;
-	for(int i=0; i<MAX_KEY_SIZE; i++){
-		indexToPush->key[i] = movedKey[i];
 	}
 	while(leftPage->AvailableSpace() > rightPage->AvailableSpace()){
 		Status s = rightPage->GetFirst(firstRid, movedKey, pointerToChild);
@@ -156,7 +150,15 @@ Status BTreeFile::RebalanceIndex(BTIndexPage* leftPage, BTIndexPage* rightPage, 
 		s =rightPage->DeleteRecord(firstRid);
 		CHECK(s);
 	}
-	return OK;
+	Status s = rightPage ->GetFirst(firstRid, movedKey, pointerToChild);
+	CHECK(s);
+	s = rightPage->Delete(movedKey, dontcare);
+	indexToPush = new IndexEntry;
+	indexToPush->value = rightPage->PageNo();
+	for(int i=0; i<MAX_KEY_SIZE; i++){
+		indexToPush->key[i] = movedKey[i];
+	}
+	return s;
 }
 
 
@@ -178,16 +180,15 @@ Status BTreeFile::InsertIntoIndex(const char * key, const RecordID rid, BTIndexP
 	CHECK(s);
 	SortedPage * childPage;
 	if(KeyCmp(key, currKey) <0){
+		prevPointerToChild = curPage->GetLeftLink();
 		PIN(prevPointerToChild, childPage);
 	}else{
 		PageID nextPointerToChild;
 		while(curPage->GetNext(currRid, currKey, nextPointerToChild)!=DONE){
-			if(KeyCmp(key, currKey) <0){
-				PIN(prevPointerToChild, childPage);
-				break;
-			}
+			if(KeyCmp(key, currKey) <0) break;
 			prevPointerToChild = nextPointerToChild;
 		}
+		PIN(prevPointerToChild, childPage);
 	}
 	if(childPage->GetType() ==INDEX_NODE){
 		s = InsertIntoIndex(key, rid, ((BTIndexPage *)childPage), newEntry); 
@@ -209,8 +210,21 @@ Status BTreeFile::InsertIntoIndex(const char * key, const RecordID rid, BTIndexP
 			NEWPAGE(newRightIndexPID, newRightIndexPage);
 			newRightIndexPage->Init(newRightIndexPID);
 			newRightIndexPage->SetType(INDEX_NODE);
+			IndexEntry *temp = new IndexEntry;
+			temp->value = newEntry->value;
+			for(int i=0; i<=MAX_KEY_SIZE; i++){
+				temp->key[i] = newEntry->key[i];
+			}
 			RebalanceIndex(curPage, newRightIndexPage, newEntry);
+			RecordID dontcare;
+			//insert new index into appropriate index
+			if(KeyCmp(temp->key,newEntry->key) <0){
+				s = curPage->Insert(temp->key, temp->value, dontcare); 
+			}else{
+				s = newRightIndexPage->Insert(temp->key, temp->value, dontcare);
+			}
 			UNPIN(newRightIndexPID, true);
+			delete temp;
 		}
 	}
 	return s;
@@ -227,8 +241,8 @@ Status BTreeFile::InsertIntoIndex(const char * key, const RecordID rid, BTIndexP
 //-------------------------------------------------------------------
 Status BTreeFile::InsertIntoLeaf(const char * key, const RecordID rid, BTLeafPage* curPage, IndexEntry *&newEntry){
 	if(curPage->AvailableSpace() >= GetKeyDataLength(key, LEAF_NODE)){
-		RecordID rid;
-		Status r = curPage ->Insert(key, rid, rid);
+		RecordID dontcare;
+		Status r = curPage ->Insert(key, rid, dontcare);
 		CHECK(r);
 		newEntry=NULL;
 		return r;
@@ -252,8 +266,13 @@ Status BTreeFile::InsertIntoLeaf(const char * key, const RecordID rid, BTLeafPag
 		newEntry->key[i] = smallestKey[i];
 	}
 	//memcpy(newEntry->key, smallestKey, sizeof(KeyType));
+	if(KeyCmp(key, newEntry->key) <0){
+		s = curPage->Insert(key, rid, dontcare);
+	}else{
+		s = newRightLeafPage->Insert(key, rid, dontcare);
+	}
 	UNPIN(newRightLeafPID, true);
-	return OK;
+	return s;
 }
 
 //-------------------------------------------------------------------
@@ -270,7 +289,6 @@ Status BTreeFile::InsertRootIsLeaf (const char * key, const RecordID rid, BTLeaf
 		//this means we have enough space in the leaf
 		RecordID newEntry;
 		Status r = ((BTLeafPage *)root)->Insert(key, rid, newEntry);
-		UNPIN(header->GetRootPageID(), true);
 		return r;
 	}
 	//we don't have enough space in the leaf. so its time to start indexing
@@ -321,7 +339,6 @@ Status BTreeFile::InsertRootIsLeaf (const char * key, const RecordID rid, BTLeaf
 		CHECK(s);
 	}
 	//now unpin all these pages. 
-	UNPIN(leftLeafPID, true);
 	UNPIN(newRightLeafPID, true);
 	UNPIN(header->GetRootPageID(), true);
 	return OK;
@@ -394,8 +411,8 @@ Status BTreeFile::Insert (const char *key, const RecordID rid)
 	PIN(header->GetRootPageID(), (Page *&) oldRoot);
 	if(oldRoot->GetType() == LEAF_NODE){
 		Status s = InsertRootIsLeaf(key, rid, (BTLeafPage *&)oldRoot);
-		CHECK(s);
-		return OK;
+		UNPIN(oldRoot->PageNo(), true);
+		return s;
 	}else if (oldRoot->GetType()==INDEX_NODE){
 		//root is index. so we must traverse index.
 		//figure out where to insert
@@ -415,6 +432,7 @@ Status BTreeFile::InsertRootIsIndex(const char * key, const RecordID rid, BTInde
 	CHECK(s);
 	SortedPage * childPage;
 	if(KeyCmp(key, currKey) <0){
+		prevPointerToChild= root->GetLeftLink();
 		PIN(prevPointerToChild, childPage);
 	}else{
 		PageID nextPointerToChild;
@@ -439,6 +457,7 @@ Status BTreeFile::InsertRootIsIndex(const char * key, const RecordID rid, BTInde
 		RecordID dontcare;
 		if(root->AvailableSpace() >= GetKeyDataLength(newEntry->key, INDEX_NODE)){
 			s = root->Insert(newEntry->key, newEntry->value, dontcare);
+			delete newEntry;
 			return s;
 		}
 		//time to create new root
@@ -449,10 +468,12 @@ Status BTreeFile::InsertRootIsIndex(const char * key, const RecordID rid, BTInde
 		newRootPage->SetType(INDEX_NODE);
 		header->SetRootPageID(newRootPID);
 		newRootPage->SetPrevPage(root->PageNo());
+		//root->SetNextPage(newRootPID);
 		PageID newRightIndexPID;
 		BTIndexPage *newRightIndexPage;
 		NEWPAGE(newRightIndexPID, newRightIndexPage);
 		newRightIndexPage->Init(newRightIndexPID);
+		newRightIndexPage->SetType(INDEX_NODE);
 		IndexEntry *newKey = NULL;
 		RebalanceIndex(root, newRightIndexPage, newKey);
 		s = newRootPage->Insert(newKey->key, newKey->value, dontcare);
