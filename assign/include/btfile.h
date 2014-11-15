@@ -92,6 +92,7 @@ private:
 	Status BTreeFile::InsertIntoLeaf(const char * key, const RecordID rid, BTLeafPage* curPage, IndexEntry *&newEntry);
 	Status BTreeFile::RebalanceLeaf(BTLeafPage* leftPage, BTLeafPage* rightPage);
 	Status BTreeFile::RebalanceIndex(BTIndexPage* leftPage, BTIndexPage* rightPage, IndexEntry *& indexToPush);
+	Status BTreeFile::DeleteIsIndex(const char * key, const RecordID rid, BTIndexPage * index);
 };
 
 

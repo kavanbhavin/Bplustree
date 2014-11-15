@@ -485,6 +485,9 @@ Status BTreeFile::InsertRootIsIndex(const char * key, const RecordID rid, BTInde
 	return s;
 }
 
+
+
+
 //-------------------------------------------------------------------
 // BTreeFile::Delete
 //
@@ -506,11 +509,40 @@ Status BTreeFile::Delete (const char *key, const RecordID rid)
 		UNPIN(header->GetRootPageID(), true);
 		return r;
 	}else{
-		((BTIndexPage *)root)->Delete(key, rid);
+		Status s= DeleteIsIndex(key, rid, (BTIndexPage *)root);
+		UNPIN(header->GetRootPageID(),true);
+		return s;
 	}
-	return FAIL;
 }
 
+
+Status BTreeFile::DeleteIsIndex(const char * key, const RecordID rid, BTIndexPage * index){
+	RecordID currRid;
+	PageID prevPointerToChild;
+	KeyType currKey;
+	Status s = index->GetFirst(currRid, currKey, prevPointerToChild);
+	CHECK(s);
+	SortedPage * childPage;
+	if(KeyCmp(key, currKey) <0){
+		prevPointerToChild= index->GetLeftLink();
+		PIN(prevPointerToChild, childPage);
+	}else{
+		PageID nextPointerToChild;
+		while(index->GetNext(currRid, currKey, nextPointerToChild)!=DONE){
+			if(KeyCmp(key, currKey) <0) break;
+			prevPointerToChild = nextPointerToChild;
+		}
+		PIN(prevPointerToChild, childPage);
+	}
+	Status r;
+	if(childPage->GetType()==LEAF_NODE){
+		r= ((BTLeafPage*)childPage)->Delete(key, rid);
+	}else{
+		r = DeleteIsIndex(key, rid, (BTIndexPage*)childPage);
+	}
+	UNPIN(childPage->PageNo(), true);
+	return r;
+}
 
 //-------------------------------------------------------------------
 // BTreeFile::OpenScan
