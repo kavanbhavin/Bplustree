@@ -96,6 +96,40 @@ BTreeFile::~BTreeFile ()
 	}
 }
 
+//Frees all pages within sp recursively.
+//Precondition : sp is pinned.
+Status freeRecursive(SortedPage* sp){
+
+	//leaf node : just free us
+	if (sp->GetType() == LEAF_NODE){
+		FREEPAGE(sp->PageNo());
+		return OK;
+	}
+
+	//index node : free all descendents first
+	BTIndexPage* pageI = (BTIndexPage*)sp;
+
+	//first get the very first left link
+	PageID leftLinkID = pageI->GetLeftLink();
+	if (leftLinkID != INVALID_PAGE){
+		SortedPage* leftLinkPointer;
+		PIN(leftLinkID, leftLinkPointer);
+		freeRecursive(leftLinkPointer);
+		RecordID currRid;
+		KeyType currKey;
+		PageID nextChild;
+		Status s = pageI->GetFirst(currRid, currKey, nextChild);
+		while (s != DONE){
+			SortedPage* actualPage;
+			PIN(nextChild, actualPage);
+			freeRecursive(actualPage);
+			s = pageI->GetNext(currRid, currKey, nextChild);
+		}
+	}
+	FREEPAGE(sp->PageNo());
+	return OK;
+}
+
 
 //-------------------------------------------------------------------
 // BTreeFile::DestroyFile
@@ -117,8 +151,8 @@ Status BTreeFile::DestroyFile ()
 			//free root page
 			FREEPAGE(header->GetRootPageID());
 		}else{
-			//recursively free all tree pages
-			//TODO
+			//we have an index root, free all pages recursively
+			freeRecursive(page);
 		}
 	}
 	FREEPAGE(headerID);
