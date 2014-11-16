@@ -187,11 +187,12 @@ Status BTreeFile::RebalanceIndex(BTIndexPage* leftPage, BTIndexPage* rightPage, 
 	Status s = rightPage ->GetFirst(firstRid, movedKey, pointerToChild);
 	CHECK(s);
 	s = rightPage->Delete(movedKey, dontcare);
-	indexToPush = new IndexEntry;
+	//indexToPush = new IndexEntry;
 	indexToPush->value = rightPage->PageNo();
-	for(int i=0; i<MAX_KEY_SIZE; i++){
+	/*for(int i=0; i<MAX_KEY_SIZE; i++){
 		indexToPush->key[i] = movedKey[i];
-	}
+	}*/
+	memcpy(indexToPush->key, movedKey, sizeof(movedKey));
 	return s;
 }
 
@@ -233,11 +234,11 @@ Status BTreeFile::InsertIntoIndex(const char * key, const RecordID rid, BTIndexP
 	}
 	CHECK(s);
 	UNPIN(childPage->PageNo(), true);
-	if(newEntry !=NULL){
+	if(newEntry->value !=INVALID_PAGE){
 		if(curPage->AvailableSpace() >= GetKeyDataLength(newEntry->key, INDEX_NODE)){
 			RecordID dontcare;
 			s = curPage->Insert(newEntry->key, newEntry->value, dontcare);
-			newEntry=NULL;
+			newEntry->value=INVALID_PAGE;
 		}else{
 			BTIndexPage * newRightIndexPage;
 			PageID newRightIndexPID;
@@ -246,9 +247,10 @@ Status BTreeFile::InsertIntoIndex(const char * key, const RecordID rid, BTIndexP
 			newRightIndexPage->SetType(INDEX_NODE);
 			IndexEntry *temp = new IndexEntry;
 			temp->value = newEntry->value;
-			for(int i=0; i<=MAX_KEY_SIZE; i++){
+			/*for(int i=0; i<=MAX_KEY_SIZE; i++){
 				temp->key[i] = newEntry->key[i];
-			}
+			}*/
+			memcpy(temp->key, newEntry->key, sizeof(newEntry->key));
 			RebalanceIndex(curPage, newRightIndexPage, newEntry);
 			RecordID dontcare;
 			//insert new index into appropriate index
@@ -278,7 +280,7 @@ Status BTreeFile::InsertIntoLeaf(const char * key, const RecordID rid, BTLeafPag
 		RecordID dontcare;
 		Status r = curPage ->Insert(key, rid, dontcare);
 		CHECK(r);
-		newEntry=NULL;
+		newEntry->value=INVALID_PAGE;
 		return r;
 	}
 	//not enough space, time to split.
@@ -289,17 +291,16 @@ Status BTreeFile::InsertIntoLeaf(const char * key, const RecordID rid, BTLeafPag
 	newRightLeafPage->SetType(LEAF_NODE);
 	Status s = RebalanceLeaf(curPage, newRightLeafPage);
 	CHECK(s);
-	newEntry = new IndexEntry;
 	newEntry->value = newRightLeafPID;
 	RecordID dontcare;
 	KeyType smallestKey;
 	RecordID dontcare2;
 	s = newRightLeafPage->GetFirst(dontcare, smallestKey, dontcare2);
 	CHECK(s);
-	for(int i=0; i<MAX_KEY_SIZE; i++){
+	/*for(int i=0; i<MAX_KEY_SIZE; i++){
 		newEntry->key[i] = smallestKey[i];
-	}
-	//memcpy(newEntry->key, smallestKey, sizeof(KeyType));
+	}*/
+	memcpy(newEntry->key, smallestKey, sizeof(smallestKey));
 	if(KeyCmp(key, newEntry->key) <0){
 		s = curPage->Insert(key, rid, dontcare);
 	}else{
@@ -477,7 +478,8 @@ Status BTreeFile::InsertRootIsIndex(const char * key, const RecordID rid, BTInde
 		PIN(prevPointerToChild, childPage);
 
 	}
-	IndexEntry *newEntry = NULL;
+	IndexEntry *newEntry = new IndexEntry;
+	newEntry->value=INVALID_PAGE;
 	if(childPage->GetType() ==INDEX_NODE){
 		s = InsertIntoIndex(key, rid, ((BTIndexPage *)childPage), newEntry); 
 	}else if(childPage->GetType()==LEAF_NODE){
@@ -487,7 +489,7 @@ Status BTreeFile::InsertRootIsIndex(const char * key, const RecordID rid, BTInde
 	}
 	UNPIN(prevPointerToChild, true);
 	CHECK(s);
-	if(newEntry !=NULL){
+	if(newEntry->value != INVALID_PAGE){
 		RecordID dontcare;
 		if(root->AvailableSpace() >= GetKeyDataLength(newEntry->key, INDEX_NODE)){
 			s = root->Insert(newEntry->key, newEntry->value, dontcare);
@@ -502,13 +504,13 @@ Status BTreeFile::InsertRootIsIndex(const char * key, const RecordID rid, BTInde
 		newRootPage->SetType(INDEX_NODE);
 		header->SetRootPageID(newRootPID);
 		newRootPage->SetPrevPage(root->PageNo());
-		//root->SetNextPage(newRootPID);
 		PageID newRightIndexPID;
 		BTIndexPage *newRightIndexPage;
 		NEWPAGE(newRightIndexPID, newRightIndexPage);
 		newRightIndexPage->Init(newRightIndexPID);
 		newRightIndexPage->SetType(INDEX_NODE);
-		IndexEntry *newKey = NULL;
+		IndexEntry *newKey = new IndexEntry;
+		newKey->value=INVALID_PAGE;
 		RebalanceIndex(root, newRightIndexPage, newKey);
 		s = newRootPage->Insert(newKey->key, newKey->value, dontcare);
 		UNPIN(newRightIndexPID, true);
