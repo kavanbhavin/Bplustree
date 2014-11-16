@@ -371,7 +371,7 @@ Status BTreeFile::InsertRootIsLeaf (const char * key, const RecordID rid, BTLeaf
 	}
 	//now unpin all these pages. 
 	UNPIN(newRightLeafPID, true);
-	UNPIN(header->GetRootPageID(), true);
+	UNPIN(newRootPID, true);
 	return OK;
 
 }

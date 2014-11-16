@@ -83,6 +83,7 @@ private:
 
 	// You may add members and methods here.
 	Status BTreeFile::InsertRootIsLeaf(const char * key, const RecordID rid, BTLeafPage *& oldRoot);
+	//value will be INVALID_PAGE if we don't need to push up.
 	struct IndexEntry {
 		KeyType key;
 		PageID value;
