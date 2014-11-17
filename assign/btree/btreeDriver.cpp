@@ -15,60 +15,31 @@ using namespace std;
 #include "btfile.h"
 #include "btreeDriver.h"
 
-void testPerformance(){
-	/*Status status = OK;
-	BTreeFile *btf = NULL;
-	bool res = true;
+void BTreeDriver::testPerformance(){
+	for (int i = 10; i <= 9000; i+=10){
+		Status status = OK;
+		BTreeFile *btf = NULL;
 
-	btf = new BTreeFile(status, "TestSinglePage1");
+		btf = new BTreeFile(status, "InsertPerformance");
 
-	if (status != OK) {
-		std::cerr << "ERROR: Couldn't create a BTreeFile" << std::endl;
-		minibase_errors.show_errors();
+		if (status != OK) {
+			std::cerr << "ERROR: Couldn't create a BTreeFile" << std::endl;
+			minibase_errors.show_errors();
 
-		std::cerr << "Hit [enter] to continue..." << std::endl;
-		std::cin.get();
-		exit(1);
+			std::cerr << "Hit [enter] to continue..." << std::endl;
+			std::cin.get();
+			exit(1);
+		}
+
+		clock_t initTime = clock();
+		InsertRange(btf, 1, i);
+		clock_t endTime = clock();
+		double timeInMillis = (endTime - initTime) * (1000.0/CLOCKS_PER_SEC);
+		cout << i << " : " << timeInMillis << "\n";
+
+		btf->DestroyFile();
+		delete btf;
 	}
-
-	if (!InsertRange(btf, 1, 50)) {
-		std::cerr << "InsertRange(1, 50) failed" << std::endl;
-		res = false;
-	}
-
-	if (!TestNumLeafPages(btf, 1)) {
-		std::cerr << "TestNumLeafPages(1) failed" << std::endl;
-		res = false;
-	}
-
-	if (!TestNumEntries(btf, 50)) {
-		std::cerr << "TestNumEntries(50) failed" << std::endl;
-		res = false;
-	}
-	
-	std::vector<int> expectedKeys;
-	for (int i = 1; i <= 50; i++) {
-		expectedKeys.push_back(i);
-	}
-	
-	if (!TestScanKeys(btf, NULL, NULL, expectedKeys)) {
-		std::cerr << "TestScanKeys(NULL, NULL) failed" << std::endl;
-		res = false;
-	}
-
-	// We destroy and rebuild the file before to reduce
-	// dependence on working Delete function.
-	if (btf->DestroyFile() != OK) {
-		std::cerr << "Error destroying BTreeFile" << std::endl;
-		res = false;
-	}
-
-	delete btf;
-
-	if (res) {
-		std::cout << "Test 1 Passed!" << std::endl;
-	}
-	return res;*/
 }
 
 
@@ -130,6 +101,11 @@ Status BTreeDriver::runTests() {
 			break;
 		case '7':
 			result = Test7();
+			break;
+		case '8':
+			testPerformance();
+			result = OK;
+			status = OK;
 			break;
 		}
 
