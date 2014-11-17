@@ -522,7 +522,6 @@ Status BTreeFile::InsertRootIsIndex(const char * key, const RecordID rid, BTInde
 
 
 
-
 //-------------------------------------------------------------------
 // BTreeFile::Delete
 //
@@ -550,43 +549,6 @@ Status BTreeFile::Delete (const char *key, const RecordID rid)
 	}
 }
 
-Status BTreeFile::DeleteIsLeaf(const char * key, const RecordID rid, BTLeafPage * leaf, bool &mergedWithRight){
-	//first we delete the entry
-	mergedWithRight =false;
-	Status s= leaf->Delete(key, rid);
-	CHECK(s);
-	//now we check if leaf is underful
-	/*if(leaf->AvailableSpace() >= HEAPPAGE_DATA_SIZE/2){
-		PageID rightLeafPID = leaf->GetNextPage();
-		if(rightLeafPID != INVALID_PAGE){
-			BTLeafPage * rightLeafPage;
-			PIN(rightLeafPID, (Page *&) rightLeafPage);
-			if(rightLeafPage->AvailableSpace()>=(HEAPPAGE_DATA_SIZE-leaf->AvailableSpace())){
-				//we can merge with rightLeaf. so we transfer everything from left leaf to right leaf.
-				while (true) {
-					KeyType movedKey;
-					RecordID movedVal, firstRid, insertedRid;
-					Status s = leaf->GetFirst(firstRid, movedKey, movedVal);
-					if (s == DONE) break;
-					s = rightLeafPage->Insert(movedKey, movedVal, insertedRid);
-					CHECK(s);
-					s= leaf->DeleteRecord(firstRid);
-					CHECK(s);
-				}
-				mergedWithRight = true;
-			}
-			rightLeafPage->SetPrevPage(leaf->GetPrevPage());
-			if(leaf->GetPrevPage() !=INVALID_PAGE){
-				BTLeafPage * prevPage;
-				PIN(leaf->GetPrevPage(), (Page*&)prevPage);
-				prevPage->SetNextPage(rightLeafPage->PageNo());
-				UNPIN(prevPage->PageNo(), true);
-			}
-			UNPIN(rightLeafPID, true);
-		}
-	}*/
-	return s;
-}
 
 Status BTreeFile::DeleteIsIndex(const char * key, const RecordID rid, BTIndexPage * index){
 	RecordID currRid;
@@ -608,19 +570,11 @@ Status BTreeFile::DeleteIsIndex(const char * key, const RecordID rid, BTIndexPag
 	}
 	Status r;
 	if(childPage->GetType()==LEAF_NODE){
-		bool mergedWithRight;
-		r= DeleteIsLeaf(key, rid, (BTLeafPage *)childPage, mergedWithRight);
-		if(mergedWithRight) {
-			FREEPAGE(childPage->PageNo());
-			RecordID dontcare;
-			index->Delete(currKey, dontcare);
-		}else UNPIN(childPage->PageNo(), true);
-	}else if(childPage->GetType()==INDEX_NODE){
-		r = DeleteIsIndex(key, rid, (BTIndexPage*)childPage);
-		UNPIN(childPage->PageNo(), true);
+		r= ((BTLeafPage*)childPage)->Delete(key, rid);
 	}else{
-		cout << "child doens't have valid type" << endl;
+		r = DeleteIsIndex(key, rid, (BTIndexPage*)childPage);
 	}
+	UNPIN(childPage->PageNo(), true);
 	return r;
 }
 
