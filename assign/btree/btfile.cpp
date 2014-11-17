@@ -615,21 +615,26 @@ IndexFileScan *BTreeFile::OpenScan (const char *lowKey, const char *highKey)
 	RecordID rid;
 	char firstKey[MAX_KEY_SIZE];
 	rid.pageNo = INVALID_PAGE;
+	bool overTop = false;
 	if (lowPage != NULL) {
 		if(lowPage->_Search(rid, searchTerm, dataRid, firstKey) !=OK){
 			PageID nextPage = lowPage->GetNextPage();
 			MINIBASE_BM->UnpinPage(firstGuy, false);
 			while(nextPage != INVALID_PAGE){
 				MINIBASE_BM->PinPage(nextPage, (Page *&)lowPage);
-				if(lowPage->_Search(rid, searchTerm, dataRid, firstKey)==OK){
+				if(lowPage->_Search(rid, searchTerm, dataRid, firstKey)==OK && KeyCmp(firstKey, highKey) <= 0){
 					break;
 				}
 				nextPage = lowPage->GetNextPage();
 				MINIBASE_BM->UnpinPage(lowPage->PageNo(), false);
 			}
-			if(nextPage == INVALID_PAGE) lowPage = NULL;
+			if(nextPage == INVALID_PAGE) {
+				overTop = true;
+				lowPage = NULL;
+			}
 		}
-	}else if(KeyCmp(firstKey,highKey)>0) {
+	}
+	if(!overTop && KeyCmp(firstKey,highKey)>0) {
 			MINIBASE_BM->UnpinPage(firstGuy, false);
 			firstGuy = INVALID_PAGE;
 			lowPage = NULL;
