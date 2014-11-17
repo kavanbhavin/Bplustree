@@ -608,13 +608,15 @@ Status BTreeFile::DeleteIsIndex(const char * key, const RecordID rid, BTIndexPag
 	}
 	Status r;
 	if(childPage->GetType()==LEAF_NODE){
-		bool mergedWithRight;
+		/*bool mergedWithRight;
 		r= DeleteIsLeaf(key, rid, (BTLeafPage *)childPage, mergedWithRight);
 		if(mergedWithRight) {
 			FREEPAGE(childPage->PageNo());
 			RecordID dontcare;
-			index->Delete(currKey, dontcare);
-		}else UNPIN(childPage->PageNo(), true);
+			s = index->Delete(currKey, dontcare);
+			CHECK(s);*/
+		r = ((BTLeafPage *)childPage)->DeleteRecord(rid);
+		/*}else UNPIN(childPage->PageNo(), true);*/
 	}else if(childPage->GetType()==INDEX_NODE){
 		r = DeleteIsIndex(key, rid, (BTIndexPage*)childPage);
 		UNPIN(childPage->PageNo(), true);
