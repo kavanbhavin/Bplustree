@@ -15,6 +15,62 @@ using namespace std;
 #include "btfile.h"
 #include "btreeDriver.h"
 
+void testPerformance(){
+	/*Status status = OK;
+	BTreeFile *btf = NULL;
+	bool res = true;
+
+	btf = new BTreeFile(status, "TestSinglePage1");
+
+	if (status != OK) {
+		std::cerr << "ERROR: Couldn't create a BTreeFile" << std::endl;
+		minibase_errors.show_errors();
+
+		std::cerr << "Hit [enter] to continue..." << std::endl;
+		std::cin.get();
+		exit(1);
+	}
+
+	if (!InsertRange(btf, 1, 50)) {
+		std::cerr << "InsertRange(1, 50) failed" << std::endl;
+		res = false;
+	}
+
+	if (!TestNumLeafPages(btf, 1)) {
+		std::cerr << "TestNumLeafPages(1) failed" << std::endl;
+		res = false;
+	}
+
+	if (!TestNumEntries(btf, 50)) {
+		std::cerr << "TestNumEntries(50) failed" << std::endl;
+		res = false;
+	}
+	
+	std::vector<int> expectedKeys;
+	for (int i = 1; i <= 50; i++) {
+		expectedKeys.push_back(i);
+	}
+	
+	if (!TestScanKeys(btf, NULL, NULL, expectedKeys)) {
+		std::cerr << "TestScanKeys(NULL, NULL) failed" << std::endl;
+		res = false;
+	}
+
+	// We destroy and rebuild the file before to reduce
+	// dependence on working Delete function.
+	if (btf->DestroyFile() != OK) {
+		std::cerr << "Error destroying BTreeFile" << std::endl;
+		res = false;
+	}
+
+	delete btf;
+
+	if (res) {
+		std::cout << "Test 1 Passed!" << std::endl;
+	}
+	return res;*/
+}
+
 
 void TestScanCount(int actualCount, int expectedCount) {
 	if (actualCount != expectedCount) {
@@ -148,7 +204,7 @@ bool BTreeDriver::Test1() {
 		exit(1);
 	}
 
-	if (!InsertRange(btf, 1, 50 /* was 50 */)) {
+	if (!InsertRange(btf, 1, 50)) {
 		std::cerr << "InsertRange(1, 50) failed" << std::endl;
 		res = false;
 	}
@@ -164,7 +220,6 @@ bool BTreeDriver::Test1() {
 	}
 	
 	std::vector<int> expectedKeys;
-
 	for (int i = 1; i <= 50; i++) {
 		expectedKeys.push_back(i);
 	}
@@ -748,13 +803,14 @@ bool BTreeDriver::InsertRange(BTreeFile *btf, int low, int high,
 		rid.pageNo=keyNum + ridOffset;
 		rid.slotNo=keyNum + ridOffset + 1;
 		BTreeDriver::toString(keyNum, skey, pad);
-		
+
 		if (btf->Insert(skey, rid) != OK) {
 			std::cerr << "Insertion of range failed at key=" << skey
 					  << " rid=" << rid << std::endl;
 			minibase_errors.show_errors();
 			return false;
 		}
+
 		if (reverse) {
 			i--;
 		} else {
@@ -891,11 +947,6 @@ PageID BTreeDriver::GetLeftmostLeaf(BTreeFile *btf) {
 			}
 
 			curPid = tempPid;
-
-			if (MINIBASE_BM->PinPage(curPid, (Page *&)curPage) == FAIL) {
-				std::cerr << "Unable to pin page" << std::endl;
-				return INVALID_PAGE;
-			}
 		}
 	}
 
