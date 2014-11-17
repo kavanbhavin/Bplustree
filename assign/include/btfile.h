@@ -94,6 +94,7 @@ private:
 	Status BTreeFile::RebalanceLeaf(BTLeafPage* leftPage, BTLeafPage* rightPage);
 	Status BTreeFile::RebalanceIndex(BTIndexPage* leftPage, BTIndexPage* rightPage, IndexEntry *& indexToPush);
 	Status BTreeFile::DeleteIsIndex(const char * key, const RecordID rid, BTIndexPage * index);
+	Status BTreeFile::DeleteIsLeaf(const char * key, const RecordID rid, BTLeafPage * leaf, bool &mergedWithRight);
 };
 
 

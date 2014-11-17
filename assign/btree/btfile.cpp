@@ -6,8 +6,6 @@
 #include "btfilescan.h"
 #define CHECK(S)\
 	if(S!=OK) return S;
-#define CHECK_NEW_ENTRY(NE)\
-	if(NE->value == INVALID_PAGE) return OK
 //-------------------------------------------------------------------
 // BTreeFile::BTreeFile
 //
@@ -186,11 +184,12 @@ Status BTreeFile::RebalanceIndex(BTIndexPage* leftPage, BTIndexPage* rightPage, 
 	}
 	Status s = rightPage ->GetFirst(firstRid, movedKey, pointerToChild);
 	CHECK(s);
+	rightPage->SetLeftLink(pointerToChild);
 	s = rightPage->Delete(movedKey, dontcare);
 	//indexToPush = new IndexEntry;
 	indexToPush->value = rightPage->PageNo();
 	/*for(int i=0; i<MAX_KEY_SIZE; i++){
-		indexToPush->key[i] = movedKey[i];
+	indexToPush->key[i] = movedKey[i];
 	}*/
 	memcpy(indexToPush->key, movedKey, sizeof(movedKey));
 	return s;
@@ -248,7 +247,7 @@ Status BTreeFile::InsertIntoIndex(const char * key, const RecordID rid, BTIndexP
 			IndexEntry *temp = new IndexEntry;
 			temp->value = newEntry->value;
 			/*for(int i=0; i<=MAX_KEY_SIZE; i++){
-				temp->key[i] = newEntry->key[i];
+			temp->key[i] = newEntry->key[i];
 			}*/
 			memcpy(temp->key, newEntry->key, sizeof(newEntry->key));
 			RebalanceIndex(curPage, newRightIndexPage, newEntry);
@@ -298,7 +297,7 @@ Status BTreeFile::InsertIntoLeaf(const char * key, const RecordID rid, BTLeafPag
 	s = newRightLeafPage->GetFirst(dontcare, smallestKey, dontcare2);
 	CHECK(s);
 	/*for(int i=0; i<MAX_KEY_SIZE; i++){
-		newEntry->key[i] = smallestKey[i];
+	newEntry->key[i] = smallestKey[i];
 	}*/
 	memcpy(newEntry->key, smallestKey, sizeof(smallestKey));
 	if(KeyCmp(key, newEntry->key) <0){
@@ -370,7 +369,7 @@ Status BTreeFile::InsertRootIsLeaf (const char * key, const RecordID rid, BTLeaf
 		s = newRightLeafPage->Insert(key,rid,dontcare);
 		CHECK(s);
 	}
-	//now unpin all these pages. 
+	//now unpin all these pages.
 	UNPIN(newRightLeafPID, true);
 	UNPIN(newRootPID, true);
 	return OK;
@@ -551,6 +550,43 @@ Status BTreeFile::Delete (const char *key, const RecordID rid)
 	}
 }
 
+Status BTreeFile::DeleteIsLeaf(const char * key, const RecordID rid, BTLeafPage * leaf, bool &mergedWithRight){
+	//first we delete the entry
+	mergedWithRight =false;
+	Status s= leaf->Delete(key, rid);
+	CHECK(s);
+	//now we check if leaf is underful
+	/*if(leaf->AvailableSpace() >= HEAPPAGE_DATA_SIZE/2){
+		PageID rightLeafPID = leaf->GetNextPage();
+		if(rightLeafPID != INVALID_PAGE){
+			BTLeafPage * rightLeafPage;
+			PIN(rightLeafPID, (Page *&) rightLeafPage);
+			if(rightLeafPage->AvailableSpace()>=(HEAPPAGE_DATA_SIZE-leaf->AvailableSpace())){
+				//we can merge with rightLeaf. so we transfer everything from left leaf to right leaf.
+				while (true) {
+					KeyType movedKey;
+					RecordID movedVal, firstRid, insertedRid;
+					Status s = leaf->GetFirst(firstRid, movedKey, movedVal);
+					if (s == DONE) break;
+					s = rightLeafPage->Insert(movedKey, movedVal, insertedRid);
+					CHECK(s);
+					s= leaf->DeleteRecord(firstRid);
+					CHECK(s);
+				}
+				mergedWithRight = true;
+			}
+			rightLeafPage->SetPrevPage(leaf->GetPrevPage());
+			if(leaf->GetPrevPage() !=INVALID_PAGE){
+				BTLeafPage * prevPage;
+				PIN(leaf->GetPrevPage(), (Page*&)prevPage);
+				prevPage->SetNextPage(rightLeafPage->PageNo());
+				UNPIN(prevPage->PageNo(), true);
+			}
+			UNPIN(rightLeafPID, true);
+		}
+	}*/
+	return s;
+}
 
 Status BTreeFile::DeleteIsIndex(const char * key, const RecordID rid, BTIndexPage * index){
 	RecordID currRid;
@@ -572,11 +608,19 @@ Status BTreeFile::DeleteIsIndex(const char * key, const RecordID rid, BTIndexPag
 	}
 	Status r;
 	if(childPage->GetType()==LEAF_NODE){
-		r= ((BTLeafPage*)childPage)->Delete(key, rid);
-	}else{
+		bool mergedWithRight;
+		r= DeleteIsLeaf(key, rid, (BTLeafPage *)childPage, mergedWithRight);
+		if(mergedWithRight) {
+			FREEPAGE(childPage->PageNo());
+			RecordID dontcare;
+			index->Delete(currKey, dontcare);
+		}else UNPIN(childPage->PageNo(), true);
+	}else if(childPage->GetType()==INDEX_NODE){
 		r = DeleteIsIndex(key, rid, (BTIndexPage*)childPage);
+		UNPIN(childPage->PageNo(), true);
+	}else{
+		cout << "child doens't have valid type" << endl;
 	}
-	UNPIN(childPage->PageNo(), true);
 	return r;
 }
 
