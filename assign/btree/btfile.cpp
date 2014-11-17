@@ -191,7 +191,7 @@ Status BTreeFile::RebalanceIndex(BTIndexPage* leftPage, BTIndexPage* rightPage, 
 	/*for(int i=0; i<MAX_KEY_SIZE; i++){
 	indexToPush->key[i] = movedKey[i];
 	}*/
-	memcpy(indexToPush->key, movedKey, sizeof(movedKey));
+	memcpy(indexToPush->key, movedKey, strlen(movedKey)+1);
 	return s;
 }
 
@@ -249,7 +249,7 @@ Status BTreeFile::InsertIntoIndex(const char * key, const RecordID rid, BTIndexP
 			/*for(int i=0; i<=MAX_KEY_SIZE; i++){
 			temp->key[i] = newEntry->key[i];
 			}*/
-			memcpy(temp->key, newEntry->key, sizeof(newEntry->key));
+			memcpy(temp->key, newEntry->key, strlen(newEntry->key)+1);
 			RebalanceIndex(curPage, newRightIndexPage, newEntry);
 			RecordID dontcare;
 			//insert new index into appropriate index
@@ -299,7 +299,7 @@ Status BTreeFile::InsertIntoLeaf(const char * key, const RecordID rid, BTLeafPag
 	/*for(int i=0; i<MAX_KEY_SIZE; i++){
 	newEntry->key[i] = smallestKey[i];
 	}*/
-	memcpy(newEntry->key, smallestKey, sizeof(smallestKey));
+	memcpy(newEntry->key, smallestKey, strlen(smallestKey)+1);
 	if(KeyCmp(key, newEntry->key) <0){
 		s = curPage->Insert(key, rid, dontcare);
 	}else{
@@ -603,7 +603,7 @@ IndexFileScan *BTreeFile::OpenScan (const char *lowKey, const char *highKey)
 	char* searchTerm = (lowKey == NULL) ? "" : lowKey; //assume "" is lowest string
 	PageID firstGuy;
 	BTLeafPage* lowPage;
-	if (header->GetRootPageID() == INVALID_PAGE || _Search(searchTerm, header->GetRootPageID(), firstGuy) != OK){
+	if (header->GetRootPageID() == INVALID_PAGE || Search(searchTerm, firstGuy) != OK){
 		firstGuy = INVALID_PAGE;
 		lowPage = NULL;
 	}
@@ -616,9 +616,24 @@ IndexFileScan *BTreeFile::OpenScan (const char *lowKey, const char *highKey)
 	char firstKey[MAX_KEY_SIZE];
 	rid.pageNo = INVALID_PAGE;
 	if (lowPage != NULL) {
-		lowPage->_Search(rid, searchTerm, dataRid, firstKey);
+		if(lowPage->_Search(rid, searchTerm, dataRid, firstKey) !=OK){
+			PageID nextPage = lowPage->GetNextPage();
+			MINIBASE_BM->UnpinPage(firstGuy, false);
+			while(nextPage != INVALID_PAGE){
+				MINIBASE_BM->PinPage(nextPage, (Page *&)lowPage);
+				if(lowPage->_Search(rid, searchTerm, dataRid, firstKey)==OK){
+					break;
+				}
+				nextPage = lowPage->GetNextPage();
+				MINIBASE_BM->UnpinPage(lowPage->PageNo(), false);
+			}
+			if(nextPage == INVALID_PAGE) lowPage = NULL;
+		}
+	}else if(KeyCmp(firstKey,highKey)>0) {
+			MINIBASE_BM->UnpinPage(firstGuy, false);
+			firstGuy = INVALID_PAGE;
+			lowPage = NULL;
 	}
-
 	IndexFileScan* tbr = new BTreeFileScan(lowPage, rid, dataRid, firstKey, highKey, (highKey != NULL));
 
 	return tbr;

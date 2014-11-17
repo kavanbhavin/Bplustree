@@ -144,11 +144,11 @@ Status BTLeafPage::GetCurrent (RecordID rid, char* key, RecordID & dataRid)
 Status BTLeafPage::_Search(RecordID & rid, const char* key, RecordID & dataRid, char * keyFound)
 {
 	RecordID curLoc, curData;
-	char curKey[MAX_KEY_SIZE];
+	KeyType curKey;
 	if (GetFirst(curLoc, curKey, curData) != OK) return DONE;
 	while (true){
 		//if we have found the one we're looking for, good
-		if (strcmp(curKey, key) >= 0){
+		if (KeyCmp(curKey, key) >= 0){
 			dataRid = curData;
 			rid = curLoc;
 			memcpy(keyFound, curKey, strlen(curKey) + 1);
