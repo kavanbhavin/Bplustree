@@ -634,7 +634,7 @@ IndexFileScan *BTreeFile::OpenScan (const char *lowKey, const char *highKey)
 			}
 		}
 	}
-	if(!overTop && KeyCmp(firstKey,highKey)>0) {
+	if(!overTop && (highKey != NULL && KeyCmp(firstKey,highKey)>0)) {
 			MINIBASE_BM->UnpinPage(firstGuy, false);
 			firstGuy = INVALID_PAGE;
 			lowPage = NULL;
