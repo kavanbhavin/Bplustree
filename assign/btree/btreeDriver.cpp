@@ -16,6 +16,9 @@ using namespace std;
 #include "db.h"
 #include "btfile.h"
 #include "btreeDriver.h"
+#include "btreetest.h"
+
+#define MAX_INT_LENGTH 5
 
 void BTreeDriver::testPerformance(){
 
@@ -113,6 +116,49 @@ void BTreeDriver::testPerformance(){
 	myfile2.close();
 }
 
+void toKey(const int n, char* str) {
+	sprintf(str, "%04d", n);
+}
+
+void BTreeDriver::customTestCases(){
+	Status status;
+	BTreeFile* btf = new BTreeFile(status, "CTC"); 
+	if (status != OK) {
+			std::cerr << "ERROR: Couldn't create a BTreeFile" << std::endl;
+			minibase_errors.show_errors();
+
+			std::cerr << "Hit [enter] to continue..." << std::endl;
+			std::cin.get();
+			exit(1);
+	}
+	InsertRange(btf, 300, 400);
+	std::vector<int> expectedKeys;
+	for (int i = 300; i <= 400; i++) {
+		expectedKeys.push_back(i);
+	}
+	int low = 300, high =400;
+	char lowKey[MAX_INT_LENGTH], hiKey[MAX_INT_LENGTH];
+	BTreeTest *bt = new BTreeTest();
+	toKey(low, lowKey);
+	toKey(high, hiKey);
+	if(!TestScanKeys(btf, lowKey, hiKey, expectedKeys)) cout << "failure in first scan"<< endl;
+	bt->scanHighLow(btf, 0, 88);
+	bt->scanHighLow(btf, 401, 1000);
+	btf->DestroyFile();
+	delete btf;
+	BTreeFile* btf1 = new BTreeFile(status, "CTC");
+	if (status != OK) {
+			std::cerr << "ERROR: Couldn't create a BTreeFile" << std::endl;
+			minibase_errors.show_errors();
+
+			std::cerr << "Hit [enter] to continue..." << std::endl;
+			std::cin.get();
+			exit(1);
+	}
+	InsertRange(btf1, 1, 100);
+	//delete entire leaf
+	bt->deleteHighLow(btf1, 30, 58);
+}
 
 void TestScanCount(int actualCount, int expectedCount) {
 	if (actualCount != expectedCount) {
@@ -175,11 +221,15 @@ Status BTreeDriver::runTests() {
 			break;
 		case '8':
 			testPerformance();
-			result = OK;
+			result = true;
+			status = OK;
+			break;
+		case '9':
+			customTestCases();
+			result = true;
 			status = OK;
 			break;
 		}
-
 		if (!result || minibase_errors.error()) {
 			status = FAIL;
 			if ( minibase_errors.error() )
