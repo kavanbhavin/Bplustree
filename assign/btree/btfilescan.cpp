@@ -45,25 +45,29 @@ Status BTreeFileScan::GetNext (RecordID & rid, char* keyPtr)
 		}
 		return OK;
 	}
-	//Need to look in next page
-	PageID newLeafPid = (*leaf).GetNextPage();
-	UNPIN(leaf->PageNo(), false);
-	if(newLeafPid == INVALID_PAGE) {
-		leaf = NULL; //make sure we return done next time
-		return OK;
-	}
-	//next page is valid
-	PIN(newLeafPid, (Page*&)leaf);
-	if ((*leaf).GetFirst(current_entry, curKey, current_data) == OK) {
-		//We've reached a key that is above our range, unpin the current page and return DONE
-		if (upperBounded && strcmp(curKey, hi) > 0) {
-			UNPIN(leaf->PageNo(), false);
+	while (true){
+		//Need to look in next page
+		PageID newLeafPid = (*leaf).GetNextPage();
+		UNPIN(leaf->PageNo(), false);
+		if(newLeafPid == INVALID_PAGE) {
 			leaf = NULL; //make sure we return done next time
 			return OK;
 		}
+		//next page is valid
+		PIN(newLeafPid, (Page*&)leaf);
+		if ((*leaf).GetFirst(current_entry, curKey, current_data) == OK) {
+			//We've reached a key that is above our range, unpin the current page and return DONE
+			if (upperBounded && strcmp(curKey, hi) > 0) {
+				UNPIN(leaf->PageNo(), false);
+				leaf = NULL; //make sure we return done next time
+				return OK;
+			}
 		
-		return OK;
+			return OK;
+		}
 	}
+	//empty page
+
 	UNPIN(leaf->PageNo(), false);
 	leaf = NULL; //make sure we return done next time
     return OK;

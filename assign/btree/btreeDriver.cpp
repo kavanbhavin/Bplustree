@@ -18,7 +18,11 @@ using namespace std;
 #include "btreeDriver.h"
 #include "btreetest.h"
 
-#define MAX_INT_LENGTH 5
+#define MAX_INT_LENGTH 15
+
+void toKey(const int n, char* str) {
+	sprintf(str, "%04d", n);
+}
 
 void BTreeDriver::testPerformance(){
 
@@ -56,69 +60,47 @@ void BTreeDriver::testPerformance(){
 	myfile2.close();*/
 
 	//testing scan
-	/*ofstream myfile1, myfile2;
+	ofstream myfile1, myfile2;
 	myfile1.open("Performance/scan_performance_left.txt");
 	myfile2.open("Performance/scan_performance_right.txt");
-	for (int i = 10; i <= 9000; i+=10){
-		Status status = OK;
-		BTreeFile *btf = NULL;
 
-		btf = new BTreeFile(status, "ScanPerformance");
+	for (int i = 1000; i <= 7540; i+=10){
+	Status status = OK;
+	BTreeFile *btf = NULL;
 
-		if (status != OK) {
-			std::cerr << "ERROR: Couldn't create a BTreeFile" << std::endl;
-			minibase_errors.show_errors();
-
-			std::cerr << "Hit [enter] to continue..." << std::endl;
-			std::cin.get();
-			exit(1);
-		}
+	btf = new BTreeFile(status, "ScanPerformance");
 		InsertRange(btf, 1, i);
 
-		clock_t initTime = clock();
-		IndexFileScan *scan = btf->OpenScan(i / 4, 3 * i /4);
+		char  lowKey[MAX_INT_LENGTH]; char hiKey[MAX_INT_LENGTH];
+					clock_t initTime = clock();
+		for (int j = 1; j <= 550; j++){
+			toKey(j, lowKey);
+			toKey(j, hiKey);
+			IndexFileScan *scan = btf->OpenScan(lowKey, hiKey);
 
-	if (scan == NULL) {
-		std::cerr << "Error opening scan." << std::endl;
-		return false;
-	}
-	
-	char expectedKey[MAX_KEY_SIZE];
-	bool ret = false;
-
-	char curKey[MAX_KEY_SIZE];
-	RecordID curRid;
-	unsigned int index = 0;
-
-	std::vector<int> expectedKeyVec;
-	std::vector<int>::const_iterator iter;
-	for (iter = keys.begin(); iter != keys.end(); iter++) {
-		BTreeDriver::toString(*iter, expectedKey, pad);
-
-		if (lowKey == NULL || strcmp(lowKey, expectedKey) <= 0) {
-			if (highKey == NULL || strcmp(expectedKey, highKey) <= 0) {
-				expectedKeyVec.push_back(*iter);
+			if (scan == NULL) {
+				std::cerr << "Error opening scan." << std::endl;
 			}
+	
+			RecordID curRid;
+			char  curKey [MAX_INT_LENGTH];
+			//while (scan->GetNext(curRid, curKey) != DONE) {
+			//}
+			delete scan;
 		}
-	}
-
-	while (scan->GetNext(curRid, curKey) != DONE) {
-		clock_t endTime = clock();
+			clock_t endTime = clock();
 		double timeInMillis = (endTime - initTime) * (1000.0/CLOCKS_PER_SEC);
 		cout << i << " : " << timeInMillis << "\n";
 		myfile1 << i << "\n";
 		myfile2 << timeInMillis << "\n";
-
-		btf->DestroyFile();
-		delete btf;
+			btf->DestroyFile();
+				delete btf;
 	}
+
 	myfile1.close();
-	myfile2.close();*/
+	myfile2.close();
 }
 
-void toKey(const int n, char* str) {
-	sprintf(str, "%04d", n);
-}
 
 bool BTreeDriver::customTestCases(){
 	Status status;
