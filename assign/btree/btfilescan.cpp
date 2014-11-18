@@ -64,7 +64,6 @@ Status BTreeFileScan::GetNext (RecordID & rid, char* keyPtr)
 		
 		return OK;
 	}
-	cout << "right before crash?";
 	UNPIN(leaf->PageNo(), false);
 	leaf = NULL; //make sure we return done next time
     return OK;
