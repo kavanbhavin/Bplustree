@@ -6,6 +6,8 @@
 #include <ctime>
 #include <vector>
 #include <algorithm>
+#include <iostream>
+#include <fstream>
 
 using namespace std;
 
@@ -16,6 +18,11 @@ using namespace std;
 #include "btreeDriver.h"
 
 void BTreeDriver::testPerformance(){
+
+	//testing insert
+	/*ofstream myfile1, myfile2;
+	myfile1.open("Performance/insert_performance_left.txt");
+	myfile2.open("Performance/insert_performance_right.txt");
 	for (int i = 10; i <= 9000; i+=10){
 		Status status = OK;
 		BTreeFile *btf = NULL;
@@ -36,10 +43,74 @@ void BTreeDriver::testPerformance(){
 		clock_t endTime = clock();
 		double timeInMillis = (endTime - initTime) * (1000.0/CLOCKS_PER_SEC);
 		cout << i << " : " << timeInMillis << "\n";
+		myfile1 << i << "\n";
+		myfile2 << timeInMillis << "\n";
 
 		btf->DestroyFile();
 		delete btf;
 	}
+	myfile1.close();
+	myfile2.close();*/
+
+	//testing scan
+	ofstream myfile1, myfile2;
+	myfile1.open("Performance/scan_performance_left.txt");
+	myfile2.open("Performance/scan_performance_right.txt");
+	for (int i = 10; i <= 9000; i+=10){
+		Status status = OK;
+		BTreeFile *btf = NULL;
+
+		btf = new BTreeFile(status, "ScanPerformance");
+
+		if (status != OK) {
+			std::cerr << "ERROR: Couldn't create a BTreeFile" << std::endl;
+			minibase_errors.show_errors();
+
+			std::cerr << "Hit [enter] to continue..." << std::endl;
+			std::cin.get();
+			exit(1);
+		}
+		InsertRange(btf, 1, i);
+
+		clock_t initTime = clock();
+		IndexFileScan *scan = btf->OpenScan(i / 4, 3 * i /4);
+
+	if (scan == NULL) {
+		std::cerr << "Error opening scan." << std::endl;
+		return false;
+	}
+	
+	char expectedKey[MAX_KEY_SIZE];
+	bool ret = false;
+
+	char curKey[MAX_KEY_SIZE];
+	RecordID curRid;
+	unsigned int index = 0;
+
+	std::vector<int> expectedKeyVec;
+	std::vector<int>::const_iterator iter;
+	for (iter = keys.begin(); iter != keys.end(); iter++) {
+		BTreeDriver::toString(*iter, expectedKey, pad);
+
+		if (lowKey == NULL || strcmp(lowKey, expectedKey) <= 0) {
+			if (highKey == NULL || strcmp(expectedKey, highKey) <= 0) {
+				expectedKeyVec.push_back(*iter);
+			}
+		}
+	}
+
+	while (scan->GetNext(curRid, curKey) != DONE) {
+		clock_t endTime = clock();
+		double timeInMillis = (endTime - initTime) * (1000.0/CLOCKS_PER_SEC);
+		cout << i << " : " << timeInMillis << "\n";
+		myfile1 << i << "\n";
+		myfile2 << timeInMillis << "\n";
+
+		btf->DestroyFile();
+		delete btf;
+	}
+	myfile1.close();
+	myfile2.close();
 }
 
 
