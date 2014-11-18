@@ -56,7 +56,7 @@ void BTreeDriver::testPerformance(){
 	myfile2.close();*/
 
 	//testing scan
-	ofstream myfile1, myfile2;
+	/*ofstream myfile1, myfile2;
 	myfile1.open("Performance/scan_performance_left.txt");
 	myfile2.open("Performance/scan_performance_right.txt");
 	for (int i = 10; i <= 9000; i+=10){
@@ -113,14 +113,14 @@ void BTreeDriver::testPerformance(){
 		delete btf;
 	}
 	myfile1.close();
-	myfile2.close();
+	myfile2.close();*/
 }
 
 void toKey(const int n, char* str) {
 	sprintf(str, "%04d", n);
 }
 
-void BTreeDriver::customTestCases(){
+bool BTreeDriver::customTestCases(){
 	Status status;
 	BTreeFile* btf = new BTreeFile(status, "CTC"); 
 	if (status != OK) {
@@ -136,12 +136,11 @@ void BTreeDriver::customTestCases(){
 	for (int i = 300; i <= 400; i++) {
 		expectedKeys.push_back(i);
 	}
-	int low = 300, high =400;
 	char lowKey[MAX_INT_LENGTH], hiKey[MAX_INT_LENGTH];
-	BTreeTest *bt = new BTreeTest();
-	toKey(low, lowKey);
-	toKey(high, hiKey);
-	if(!TestScanKeys(btf, lowKey, hiKey, expectedKeys)) cout << "failure in first scan"<< endl;
+	BTreeTest * bt = new BTreeTest();
+	toKey(300, lowKey);
+	toKey(400, hiKey);
+	bool rval = TestScanKeys(btf, lowKey, hiKey, expectedKeys);
 	bt->scanHighLow(btf, 0, 88);
 	bt->scanHighLow(btf, 401, 1000);
 	btf->DestroyFile();
@@ -157,8 +156,21 @@ void BTreeDriver::customTestCases(){
 	}
 	InsertRange(btf1, 1, 100);
 	//delete entire leaf
-	bt->deleteHighLow(btf1, 30, 58);
-}
+	DeleteStride(btf1, 30, 58, 1); 
+	expectedKeys.clear();
+	for (int i=1; i <30; i++){
+		expectedKeys.push_back(i);
+	}
+	for(int i=59; i <= 100; i++){
+		expectedKeys.push_back(i);
+	}
+	toKey(1, lowKey);
+	toKey(100, hiKey);
+	rval = rval && TestScanKeys(btf1, lowKey, hiKey, expectedKeys);
+	btf1->DestroyFile();
+	delete btf1;
+	return rval;
+} 
 
 void TestScanCount(int actualCount, int expectedCount) {
 	if (actualCount != expectedCount) {

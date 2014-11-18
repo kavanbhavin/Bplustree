@@ -246,9 +246,6 @@ Status BTreeFile::InsertIntoIndex(const char * key, const RecordID rid, BTIndexP
 			newRightIndexPage->SetType(INDEX_NODE);
 			IndexEntry *temp = new IndexEntry;
 			temp->value = newEntry->value;
-			/*for(int i=0; i<=MAX_KEY_SIZE; i++){
-			temp->key[i] = newEntry->key[i];
-			}*/
 			memcpy(temp->key, newEntry->key, strlen(newEntry->key)+1);
 			RebalanceIndex(curPage, newRightIndexPage, newEntry);
 			RecordID dontcare;
@@ -548,7 +545,6 @@ Status BTreeFile::Delete (const char *key, const RecordID rid)
 		return s;
 	}
 }
-
 
 Status BTreeFile::DeleteIsIndex(const char * key, const RecordID rid, BTIndexPage * index){
 	RecordID currRid;

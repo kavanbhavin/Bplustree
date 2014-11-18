@@ -50,7 +50,7 @@ private:
 	bool Test5();
 	bool Test6();
 	bool Test7();
-	void customTestCases(); 
+	bool customTestCases(); 
 	void testPerformance();
 };
 
